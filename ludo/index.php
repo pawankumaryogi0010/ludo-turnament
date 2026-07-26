@@ -3,7 +3,7 @@
  * ======================================================
  * INDEX.PHP - MAIN ENTRY POINT
  * Ludo Tournament Platform - Complete SPA
- * Version: 5.0.0 - COMPLETE FIXED
+ * Version: 6.0.0 - COMPLETE FIXED WITH VALIDATION
  * ======================================================
  */
 
@@ -680,7 +680,6 @@ if ($basePath === '') {
         }
 
         checkAuthStatus() {
-            // ✅ FIXED: Correct API path without /v1/
             fetch(this.basePath + '/api/auth.php?action=check', { credentials: 'same-origin' })
                 .then(res => res.json())
                 .then(data => {
@@ -776,20 +775,40 @@ if ($basePath === '') {
             document.body.style.overflow = '';
         }
 
+        // ==============================================
+        // FIXED: handleLogin() with validation
+        // ==============================================
         handleLogin() {
             const form = document.getElementById('loginForm');
             const formData = new FormData(form);
-            const data = Object.fromEntries(formData);
+
+            const data = {
+                mobile: formData.get('mobile'),
+                password: formData.get('password'),
+                csrf_token: document.querySelector('input[name="csrf_token"]')?.value || ''
+            };
+
+            // ✅ Client-side validation
+            if (!data.mobile || data.mobile.length !== 10) {
+                this.showToast('Please enter a valid 10-digit mobile number');
+                return;
+            }
+            if (!data.password || data.password.length < 8) {
+                this.showToast('Password must be at least 8 characters');
+                return;
+            }
 
             const btn = form.querySelector('.auth-submit-btn');
             const originalText = btn.textContent;
             btn.textContent = 'Logging in...';
             btn.disabled = true;
 
-            // ✅ FIXED: Correct API path without /v1/
             fetch(this.basePath + '/api/auth.php?action=login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': data.csrf_token
+                },
                 body: JSON.stringify(data)
             })
             .then(res => res.json())
@@ -814,26 +833,58 @@ if ($basePath === '') {
             });
         }
 
+        // ==============================================
+        // FIXED: handleRegister() with validation
+        // ==============================================
         handleRegister() {
             const form = document.getElementById('registerForm');
             const termsCheckbox = document.getElementById('regTerms');
+
             if (!termsCheckbox.checked) {
                 this.showToast('Please accept Terms & Conditions');
                 return;
             }
 
             const formData = new FormData(form);
-            const data = Object.fromEntries(formData);
+
+            const data = {
+                username: formData.get('username'),
+                mobile: formData.get('mobile'),
+                password: formData.get('password'),
+                referral_code: formData.get('referral_code') || '',
+                csrf_token: document.querySelector('input[name="csrf_token"]')?.value || ''
+            };
+
+            // ✅ Client-side validation
+            if (!data.username || data.username.length < 3) {
+                this.showToast('Username must be at least 3 characters');
+                return;
+            }
+            if (!data.mobile || data.mobile.length !== 10) {
+                this.showToast('Please enter a valid 10-digit mobile number');
+                return;
+            }
+            if (!data.password || data.password.length < 8) {
+                this.showToast('Password must be at least 8 characters');
+                return;
+            }
+            // ✅ Password strength check
+            if (!/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+                this.showToast('Password must contain at least one uppercase, one lowercase, and one number');
+                return;
+            }
 
             const btn = form.querySelector('.auth-submit-btn');
             const originalText = btn.textContent;
             btn.textContent = 'Registering...';
             btn.disabled = true;
 
-            // ✅ FIXED: Correct API path without /v1/
             fetch(this.basePath + '/api/auth.php?action=register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': data.csrf_token
+                },
                 body: JSON.stringify(data)
             })
             .then(res => res.json())
@@ -858,15 +909,20 @@ if ($basePath === '') {
             });
         }
 
+        // ==============================================
+        // FIXED: handleLogout() with CSRF
+        // ==============================================
         handleLogout() {
             if (!confirm('Are you sure you want to logout?')) return;
 
             const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
 
-            // ✅ FIXED: Correct API path without /v1/
             fetch(this.basePath + '/api/auth.php?action=logout', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
                 body: JSON.stringify({ csrf_token: csrfToken })
             })
             .then(res => res.json())
@@ -882,6 +938,9 @@ if ($basePath === '') {
             });
         }
 
+        // ==============================================
+        // FIXED: handleJoinTournament() with CSRF
+        // ==============================================
         handleJoinTournament(entryFee, tournamentId) {
             if (!this.isLoggedIn) {
                 this.showToast('Please login to join tournaments');
@@ -899,7 +958,6 @@ if ($basePath === '') {
 
             this.showToast('Joining tournament...');
 
-            // ✅ FIXED: Correct API path without /v1/
             fetch(this.basePath + '/api/match.php?action=join', {
                 method: 'POST',
                 headers: {
