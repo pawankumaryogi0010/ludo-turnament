@@ -23,17 +23,22 @@ $userId = getCurrentUserId();
 $db = Database::getInstance();
 $conn = $db->getConnection();
 
-$stmt = $conn->prepare("
-    SELECT
-        id, username, mobile, email, wallet_balance,
-        total_matches_played, total_matches_won, total_earnings,
-        elo_rating, is_verified, kyc_status, is_active,
-        refer_code, referral_earnings, created_at
-    FROM users
-    WHERE id = :user_id
-");
-$stmt->execute([':user_id' => $userId]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
+// ✅ FIXED: User query with proper error handling
+try {
+    $stmt = $conn->prepare("
+        SELECT
+            id, username, mobile, email, wallet_balance,
+            total_matches_played, total_matches_won, total_earnings,
+            elo_rating, is_verified, kyc_status, is_active,
+            refer_code, referral_earnings, created_at
+        FROM users
+        WHERE id = ?
+    ");
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    die("Database Error: " . $e->getMessage());
+}
 
 if (!$user || $user['is_active'] != 1) {
     session_destroy();
@@ -41,48 +46,69 @@ if (!$user || $user['is_active'] != 1) {
     exit;
 }
 
-$stmt = $conn->prepare("
-    SELECT
-        id, room_code, entry_fee, prize_pool, status,
-        player1_name, player2_name, current_turn_id,
-        turn_number, created_at
-    FROM matches
-    WHERE (player1_id = :user_id OR player2_id = :user_id)
-    AND status IN ('waiting', 'ready', 'playing')
-    ORDER BY created_at DESC
-    LIMIT 1
-");
-$stmt->execute([':user_id' => $userId]);
-$activeMatch = $stmt->fetch(PDO::FETCH_ASSOC);
+// ✅ FIXED: Active match query with positional placeholders
+try {
+    $stmt = $conn->prepare("
+        SELECT
+            id, room_code, entry_fee, prize_pool, status,
+            player1_name, player2_name, current_turn_id,
+            turn_number, created_at
+        FROM matches
+        WHERE (player1_id = ? OR player2_id = ?)
+        AND status IN ('waiting', 'ready', 'playing')
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$userId, $userId]);
+    $activeMatch = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $activeMatch = null;
+}
 
-$stmt = $conn->prepare("
-    SELECT
-        id, room_code, entry_fee, prize_pool, status,
-        player1_name, player2_name, winner_name,
-        winning_amount, created_at, completed_at,
-        CASE WHEN winner_id = :user_id THEN 'won' ELSE 'lost' END as result
-    FROM matches
-    WHERE (player1_id = :user_id OR player2_id = :user_id)
-    AND status IN ('completed', 'cancelled')
-    ORDER BY created_at DESC
-    LIMIT 5
-");
-$stmt->execute([':user_id' => $userId]);
-$recentMatches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// ✅ FIXED: Recent matches query
+try {
+    $stmt = $conn->prepare("
+        SELECT
+            id, room_code, entry_fee, prize_pool, status,
+            player1_name, player2_name, winner_name,
+            winning_amount, created_at, completed_at,
+            CASE WHEN winner_id = ? THEN 'won' ELSE 'lost' END as result
+        FROM matches
+        WHERE (player1_id = ? OR player2_id = ?)
+        AND status IN ('completed', 'cancelled')
+        ORDER BY created_at DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$userId, $userId, $userId]);
+    $recentMatches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $recentMatches = [];
+}
 
-$stmt = $conn->prepare("
-    SELECT
-        id, amount, type, source, description,
-        order_id, status, created_at
-    FROM transactions
-    WHERE user_id = :user_id
-    ORDER BY created_at DESC
-    LIMIT 5
-");
-$stmt->execute([':user_id' => $userId]);
-$recentTransactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// ✅ FIXED: Transactions query
+try {
+    $stmt = $conn->prepare("
+        SELECT
+            id, amount, type, source, description,
+            order_id, status, created_at
+        FROM transactions
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 5
+    ");
+    $stmt->execute([$userId]);
+    $recentTransactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $recentTransactions = [];
+}
 
-$csrf_token = CSRFToken::generate();
+// ✅ FIXED: CSRF token generation with fallback
+if (class_exists('CSRFToken')) {
+    $csrf_token = CSRFToken::generate();
+} else {
+    // Fallback CSRF token
+    $csrf_token = bin2hex(random_bytes(32));
+}
 
 // Dynamic base path detection
 $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
@@ -102,7 +128,6 @@ if ($basePath === '') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- FIXED: Dynamic CSS path -->
     <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/style.css">
     <style>
         .dashboard-wrapper {
