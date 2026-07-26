@@ -3,7 +3,7 @@
  * ======================================================
  * INDEX.PHP - MAIN ENTRY POINT
  * Ludo Tournament Platform - Complete SPA
- * Version: 7.0.0 - COMPLETE FIXED WITH AUTH HELPER
+ * Version: 8.0.0 - ALL BUGS FIXED
  * ======================================================
  */
 
@@ -14,7 +14,19 @@ if (isLoggedIn()) {
     exit;
 }
 
-$csrf_token = CSRFToken::generate();
+// ✅ FIX: Generate CSRF token with fallback
+if (function_exists('CSRFToken::generate')) {
+    $csrf_token = CSRFToken::generate();
+} else {
+    // Fallback CSRF token
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $csrf_token = $_SESSION['csrf_token'];
+}
 
 // Dynamic base path detection
 $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
@@ -495,12 +507,12 @@ if ($basePath === '') {
                         <form id="loginForm" class="auth-form active">
                             <input type="hidden" name="csrf_token" value="<?php echo $csrf_token; ?>">
                             <div class="form-group">
-                                <label for="loginMobile">Mobile Number</label>
-                                <input type="tel" id="loginMobile" name="mobile" placeholder="Enter 10-digit mobile number" required maxlength="10" pattern="[0-9]{10}">
+                                <label for="loginMobile">Mobile Number / Username / Email</label>
+                                <input type="text" id="loginMobile" name="mobile" placeholder="Enter mobile, username or email" required>
                             </div>
                             <div class="form-group">
                                 <label for="loginPassword">Password</label>
-                                <input type="password" id="loginPassword" name="password" placeholder="Enter your password" required minlength="8">
+                                <input type="password" id="loginPassword" name="password" placeholder="Enter your password" required minlength="6">
                             </div>
                             <button type="submit" class="auth-submit-btn">Login</button>
                             <p class="auth-switch">Don't have an account? <a href="#" id="switchToRegister">Register</a></p>
@@ -517,8 +529,12 @@ if ($basePath === '') {
                                 <input type="tel" id="regMobile" name="mobile" placeholder="Enter 10-digit mobile number" required maxlength="10" pattern="[0-9]{10}">
                             </div>
                             <div class="form-group">
+                                <label for="regEmail">Email (Optional)</label>
+                                <input type="email" id="regEmail" name="email" placeholder="Enter your email" maxlength="100">
+                            </div>
+                            <div class="form-group">
                                 <label for="regPassword">Password</label>
-                                <input type="password" id="regPassword" name="password" placeholder="Min 8 characters" required minlength="8">
+                                <input type="password" id="regPassword" name="password" placeholder="Min 6 characters with uppercase, lowercase & number" required minlength="6">
                             </div>
                             <div class="form-group">
                                 <label for="regReferral">Referral Code (Optional)</label>
@@ -545,7 +561,7 @@ if ($basePath === '') {
     <!-- FIXED: Dynamic JS path -->
     <script src="<?php echo $basePath; ?>/assets/js/pwa-installer.js"></script>
     
-    <!-- ✅ ADD THIS: Auth Helper -->
+    <!-- ✅ Auth Helper -->
     <script src="<?php echo $basePath; ?>/assets/js/auth-helper.js"></script>
 
     <script>
@@ -556,6 +572,7 @@ if ($basePath === '') {
             this.walletBalance = 0;
             this.userData = null;
             this.basePath = '<?php echo $basePath; ?>';
+            this.csrfToken = '<?php echo $csrf_token; ?>';
             this.init();
         }
 
@@ -563,9 +580,19 @@ if ($basePath === '') {
             this.bindEvents();
             this.checkAuthStatus();
             this.showPage('dashboard');
+            this.loadWalletFromStorage();
+        }
+
+        loadWalletFromStorage() {
+            const savedBalance = localStorage.getItem('walletBalance');
+            if (savedBalance) {
+                this.walletBalance = parseFloat(savedBalance) || 0;
+                this.updateWalletUI();
+            }
         }
 
         bindEvents() {
+            // Navigation
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', () => {
                     const page = item.dataset.page;
@@ -575,6 +602,7 @@ if ($basePath === '') {
                 });
             });
 
+            // Tournament Join
             document.querySelectorAll('.card-join-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -584,18 +612,21 @@ if ($basePath === '') {
                 });
             });
 
+            // Wallet Add
             document.getElementById('walletAddBtn')?.addEventListener('click', () => {
                 this.showPage('wallet');
                 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
                 document.querySelector('.nav-item[data-page="wallet"]')?.classList.add('active');
             });
 
+            // Referral
             document.getElementById('referralBtn')?.addEventListener('click', () => {
                 this.showPage('refer');
                 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
                 document.querySelector('.nav-item[data-page="refer"]')?.classList.add('active');
             });
 
+            // Copy Referral Code
             document.getElementById('copyCodeBtn')?.addEventListener('click', () => {
                 const code = document.getElementById('referCodeText')?.textContent || 'REF123456';
                 navigator.clipboard?.writeText(code).then(() => {
@@ -611,6 +642,7 @@ if ($basePath === '') {
                 });
             });
 
+            // Share Referral
             document.getElementById('shareReferBtn')?.addEventListener('click', () => {
                 const code = document.getElementById('referCodeText')?.textContent || 'REF123456';
                 const text = `🎲 Join Ludo Tournament Pro! Use my referral code: ${code}`;
@@ -623,6 +655,7 @@ if ($basePath === '') {
                 }
             });
 
+            // Auth Modal
             document.getElementById('loginBtn')?.addEventListener('click', () => this.openAuthModal('login'));
             document.getElementById('registerBtn')?.addEventListener('click', () => this.openAuthModal('register'));
             document.getElementById('authModalClose')?.addEventListener('click', () => this.closeAuthModal());
@@ -637,6 +670,7 @@ if ($basePath === '') {
                 this.openAuthModal('login');
             });
 
+            // Form Submissions
             document.getElementById('loginForm')?.addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.handleLogin();
@@ -647,8 +681,10 @@ if ($basePath === '') {
                 this.handleRegister();
             });
 
+            // Logout
             document.getElementById('logoutBtn')?.addEventListener('click', () => this.handleLogout());
 
+            // Wallet Actions
             document.getElementById('addMoneyBtn')?.addEventListener('click', () => {
                 this.showToast('Add money feature coming soon');
             });
@@ -657,6 +693,7 @@ if ($basePath === '') {
                 this.showToast('Withdraw feature coming soon');
             });
 
+            // History Filters
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -665,10 +702,12 @@ if ($basePath === '') {
                 });
             });
 
+            // Close modal on backdrop click
             document.getElementById('authModal')?.addEventListener('click', (e) => {
                 if (e.target === e.currentTarget) this.closeAuthModal();
             });
 
+            // Legal pages
             document.getElementById('termsBtn')?.addEventListener('click', () => window.location.href = this.basePath + '/terms.php');
             document.getElementById('privacyBtn')?.addEventListener('click', () => window.location.href = this.basePath + '/privacy.php');
         }
@@ -682,24 +721,44 @@ if ($basePath === '') {
             }
         }
 
-        checkAuthStatus() {
-            fetch(this.basePath + '/api/auth.php?action=check', { credentials: 'same-origin' })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success && data.data.logged_in) {
-                        this.isLoggedIn = true;
-                        this.userData = data.data.user;
-                        this.updateAuthUI(true);
-                        this.updateUserInfo(data.data.user);
-                    } else {
-                        this.isLoggedIn = false;
-                        this.updateAuthUI(false);
+        // ✅ FIXED: Use AuthHelper for auth check
+        async checkAuthStatus() {
+            try {
+                const result = await AuthHelper.checkAuth();
+                if (result.success && result.data?.logged_in) {
+                    this.isLoggedIn = true;
+                    this.userData = result.data.user;
+                    this.updateAuthUI(true);
+                    this.updateUserInfo(result.data.user);
+                    
+                    // Update wallet
+                    if (result.data.user?.wallet_balance !== undefined) {
+                        this.walletBalance = parseFloat(result.data.user.wallet_balance) || 0;
+                        this.updateWalletUI();
+                        localStorage.setItem('walletBalance', this.walletBalance.toString());
                     }
-                })
-                .catch(() => {
+                    
+                    // Update CSRF token
+                    if (result.data.csrf_token) {
+                        this.csrfToken = result.data.csrf_token;
+                        this.updateCsrfTokens(result.data.csrf_token);
+                    }
+                } else {
                     this.isLoggedIn = false;
                     this.updateAuthUI(false);
-                });
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                this.isLoggedIn = false;
+                this.updateAuthUI(false);
+            }
+        }
+
+        updateCsrfTokens(token) {
+            document.querySelectorAll('input[name="csrf_token"]').forEach(input => {
+                input.value = token;
+            });
+            this.csrfToken = token;
         }
 
         updateAuthUI(loggedIn) {
@@ -708,12 +767,12 @@ if ($basePath === '') {
             const profileName = document.getElementById('profileName');
             const profileId = document.getElementById('profileId');
 
-            if (loggedIn) {
+            if (loggedIn && this.userData) {
                 if (authSection) authSection.style.display = 'none';
-                if (displayUsername) displayUsername.textContent = this.userData?.username || 'Player';
-                if (profileName) profileName.textContent = this.userData?.username || 'Guest User';
-                if (profileId) profileId.textContent = `ID: #${this.userData?.id || 'GUEST001'}`;
-                document.querySelector('.avatar-text').textContent = (this.userData?.username || 'G')[0].toUpperCase();
+                if (displayUsername) displayUsername.textContent = this.userData.username || 'Player';
+                if (profileName) profileName.textContent = this.userData.username || 'Guest User';
+                if (profileId) profileId.textContent = `ID: #${this.userData.id || 'GUEST001'}`;
+                document.querySelector('.avatar-text').textContent = (this.userData.username || 'G')[0].toUpperCase();
             } else {
                 if (authSection) authSection.style.display = 'flex';
                 if (displayUsername) displayUsername.textContent = 'Guest';
@@ -729,6 +788,7 @@ if ($basePath === '') {
             if (user.wallet_balance !== undefined) {
                 this.walletBalance = parseFloat(user.wallet_balance) || 0;
                 this.updateWalletUI();
+                localStorage.setItem('walletBalance', this.walletBalance.toString());
             }
 
             document.getElementById('statMatches').textContent = user.total_matches_played || 0;
@@ -786,16 +846,16 @@ if ($basePath === '') {
             const formData = new FormData(form);
 
             const data = {
-                mobile: formData.get('mobile'),
+                username: formData.get('mobile'), // Can be mobile, username, or email
                 password: formData.get('password')
             };
 
-            if (!data.mobile || data.mobile.length !== 10) {
-                this.showToast('Please enter a valid 10-digit mobile number');
+            if (!data.username || data.username.length < 3) {
+                this.showToast('Please enter mobile number, username or email');
                 return;
             }
-            if (!data.password || data.password.length < 8) {
-                this.showToast('Password must be at least 8 characters');
+            if (!data.password || data.password.length < 6) {
+                this.showToast('Password must be at least 6 characters');
                 return;
             }
 
@@ -811,6 +871,12 @@ if ($basePath === '') {
                     this.userData = result.data.user;
                     this.updateAuthUI(true);
                     this.updateUserInfo(result.data.user);
+                    
+                    if (result.data.csrf_token) {
+                        this.csrfToken = result.data.csrf_token;
+                        this.updateCsrfTokens(result.data.csrf_token);
+                    }
+                    
                     this.closeAuthModal();
                     this.showToast('Login successful! Welcome back!');
                 } else {
@@ -842,9 +908,9 @@ if ($basePath === '') {
             const data = {
                 username: formData.get('username'),
                 mobile: formData.get('mobile'),
+                email: formData.get('email') || '',
                 password: formData.get('password'),
-                referral_code: formData.get('referral_code') || '',
-                email: formData.get('email') || ''
+                referral_code: formData.get('referral_code') || ''
             };
 
             if (!data.username || data.username.length < 3) {
@@ -855,8 +921,8 @@ if ($basePath === '') {
                 this.showToast('Please enter a valid 10-digit mobile number');
                 return;
             }
-            if (!data.password || data.password.length < 8) {
-                this.showToast('Password must be at least 8 characters');
+            if (!data.password || data.password.length < 6) {
+                this.showToast('Password must be at least 6 characters');
                 return;
             }
             if (!/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/[0-9]/.test(data.password)) {
@@ -876,6 +942,12 @@ if ($basePath === '') {
                     this.userData = result.data.user;
                     this.updateAuthUI(true);
                     this.updateUserInfo(result.data.user);
+                    
+                    if (result.data.csrf_token) {
+                        this.csrfToken = result.data.csrf_token;
+                        this.updateCsrfTokens(result.data.csrf_token);
+                    }
+                    
                     this.closeAuthModal();
                     this.showToast('Registration successful! Welcome to Ludo Pro!');
                 } else {
@@ -902,8 +974,10 @@ if ($basePath === '') {
                     this.isLoggedIn = false;
                     this.userData = null;
                     this.updateAuthUI(false);
+                    this.walletBalance = 0;
+                    this.updateWalletUI();
+                    localStorage.removeItem('walletBalance');
                     this.showToast('Logged out successfully');
-                    localStorage.removeItem('userData');
                 } else {
                     this.showToast(result.message || 'Logout failed');
                 }
@@ -914,7 +988,7 @@ if ($basePath === '') {
         }
 
         // ==============================================
-        // FIXED: handleJoinTournament() with CSRF
+        // ✅ FIXED: handleJoinTournament() with dynamic CSRF
         // ==============================================
         handleJoinTournament(entryFee, tournamentId) {
             if (!this.isLoggedIn) {
@@ -922,8 +996,6 @@ if ($basePath === '') {
                 this.openAuthModal('login');
                 return;
             }
-
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
 
             if (this.walletBalance < entryFee) {
                 this.showToast(`Insufficient balance. Need ₹${entryFee.toFixed(2)}`);
@@ -933,25 +1005,36 @@ if ($basePath === '') {
 
             this.showToast('Joining tournament...');
 
+            // ✅ Use current CSRF token
+            const csrfToken = this.csrfToken || document.querySelector('input[name="csrf_token"]')?.value || '';
+
             fetch(this.basePath + '/api/match.php?action=join', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': csrfToken
                 },
-                credentials: 'same-origin',
+                credentials: 'include',
                 body: JSON.stringify({
                     entry_fee: entryFee,
                     tournament_id: tournamentId,
                     csrf_token: csrfToken
                 })
             })
-            .then(res => res.json())
+            .then(async res => {
+                const text = await res.text();
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    throw new Error('Invalid response from server');
+                }
+            })
             .then(data => {
                 if (data.success) {
                     if (data.data.balance_after !== undefined) {
                         this.walletBalance = data.data.balance_after;
                         this.updateWalletUI();
+                        localStorage.setItem('walletBalance', this.walletBalance.toString());
                     }
                     this.showToast(data.message || 'Successfully joined!');
                     if (data.data.redirect_url) {
@@ -963,7 +1046,8 @@ if ($basePath === '') {
                     this.showToast(data.message || 'Failed to join tournament');
                 }
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error('Join tournament error:', error);
                 this.showToast('Network error. Please try again.');
             });
         }
