@@ -3,7 +3,7 @@
  * ======================================================
  * DATABASE CONFIGURATION & CORE SECURITY - FIXED
  * Ludo Tournament Platform - Production Ready
- * Version: 5.0.0 - COMPLETE REWRITE
+ * Version: 5.1.0 - XAMPP FIXED
  * ======================================================
  */
 
@@ -19,16 +19,17 @@ if (file_exists($envFile)) {
     $env = [];
 }
 
-define('ENVIRONMENT', $env['ENVIRONMENT'] ?? 'production');
+define('ENVIRONMENT', $env['ENVIRONMENT'] ?? 'development');
 define('DB_HOST', $env['DB_HOST'] ?? 'localhost');
-define('DB_NAME', $env['ludo_tournament'] ?? 'ludo_tournament_db');
-define('DB_USER', $env['DB_USER'] ?? 'ludo_user');
+// ✅ FIXED: SAHI VARIABLE NAME
+define('DB_NAME', $env['DB_NAME'] ?? 'ludo_tournament');
+define('DB_USER', $env['DB_USER'] ?? 'root');
 define('DB_PASS', $env['DB_PASS'] ?? '');
 define('DB_CHARSET', 'utf8mb4');
 
-define('BASE_URL', $env['BASE_URL'] ?? 'https://yourdomain.com');
+define('BASE_URL', $env['BASE_URL'] ?? 'http://localhost/ludo/');
 define('SITE_NAME', 'Ludo Tournament Pro');
-define('ADMIN_EMAIL', $env['ADMIN_EMAIL'] ?? 'support@yourdomain.com');
+define('ADMIN_EMAIL', $env['ADMIN_EMAIL'] ?? 'support@localhost.com');
 define('TIMEZONE', 'Asia/Kolkata');
 define('SESSION_TIMEOUT', (int)($env['SESSION_TIMEOUT'] ?? 1800));
 define('MAX_LOGIN_ATTEMPTS', 5);
@@ -40,7 +41,7 @@ define('TDS_THRESHOLD', (float)($env['TDS_THRESHOLD'] ?? 10000));
 date_default_timezone_set(TIMEZONE);
 
 // ======================================================
-// ERROR REPORTING
+// ERROR REPORTING (Development Mode)
 // ======================================================
 if (ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
@@ -219,8 +220,10 @@ class Database
 
     private function handleError(string $message, PDOException $e, ?string $sql = null, ?array $params = null): void
     {
+        // ✅ FIXED: Development mode mein error show karein
         if (ENVIRONMENT === 'development') {
-            return;
+            // Throw the actual error so we can see it
+            throw new PDOException($e->getMessage() . " [SQL: " . $sql . "]");
         }
 
         $errorLog = [
