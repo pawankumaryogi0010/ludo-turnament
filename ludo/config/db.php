@@ -258,8 +258,13 @@ class SessionManager
     {
         $cookieParams = session_get_cookie_params();
 
-        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-        $domain = $cookieParams['domain'] ?? '';
+        // FIX BUG 3: On localhost HTTP, secure=true breaks session cookies
+        $isLocalhost = in_array(
+            $_SERVER['HTTP_HOST'] ?? '',
+            ['localhost', '127.0.0.1', '::1']
+        ) || strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
+        $secure = !$isLocalhost && isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+        $domain = (!$isLocalhost) ? ($cookieParams['domain'] ?? '') : '';
 
         session_set_cookie_params([
             'lifetime' => SESSION_TIMEOUT,
@@ -267,7 +272,7 @@ class SessionManager
             'domain' => $domain,
             'secure' => $secure,
             'httponly' => true,
-            'samesite' => 'Strict',
+            'samesite' => $isLocalhost ? 'Lax' : 'Strict',
         ]);
 
         session_name('LUDO_SESS_ID');
