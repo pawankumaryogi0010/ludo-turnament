@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * DATABASE CONFIGURATION & CORE SECURITY - FIXED
+ * DATABASE CONFIGURATION & CORE SECURITY - COMPLETE FIXED
  * Ludo Tournament Platform - Production Ready
- * Version: 5.1.0 - XAMPP FIXED
+ * Version: 6.0.0 - FULLY FIXED
  * ======================================================
  */
 
@@ -19,15 +19,17 @@ if (file_exists($envFile)) {
     $env = [];
 }
 
+// ======================================================
+// CONSTANTS DEFINITION
+// ======================================================
 define('ENVIRONMENT', $env['ENVIRONMENT'] ?? 'development');
 define('DB_HOST', $env['DB_HOST'] ?? 'localhost');
-// ✅ FIXED: SAHI VARIABLE NAME
 define('DB_NAME', $env['DB_NAME'] ?? 'ludo_tournament');
 define('DB_USER', $env['DB_USER'] ?? 'root');
 define('DB_PASS', $env['DB_PASS'] ?? '');
 define('DB_CHARSET', 'utf8mb4');
 
-define('BASE_URL', $env['BASE_URL'] ?? 'http://localhost/ludo/');
+define('BASE_URL', rtrim($env['BASE_URL'] ?? 'http://localhost/ludo/', '/'));
 define('SITE_NAME', 'Ludo Tournament Pro');
 define('ADMIN_EMAIL', $env['ADMIN_EMAIL'] ?? 'support@localhost.com');
 define('TIMEZONE', 'Asia/Kolkata');
@@ -41,11 +43,12 @@ define('TDS_THRESHOLD', (float)($env['TDS_THRESHOLD'] ?? 10000));
 date_default_timezone_set(TIMEZONE);
 
 // ======================================================
-// ERROR REPORTING (Development Mode)
+// ERROR REPORTING
 // ======================================================
 if (ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
     ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
 } else {
     error_reporting(0);
     ini_set('display_errors', 0);
@@ -54,16 +57,17 @@ if (ENVIRONMENT === 'development') {
 }
 
 // ======================================================
-// DATABASE CLASS - COMPLETE REWRITE
+// DATABASE CLASS
 // ======================================================
 class Database
 {
     private static ?Database $instance = null;
     private PDO $connection;
+    private array $options;
 
     private function __construct()
     {
-        $options = [
+        $this->options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
@@ -80,7 +84,7 @@ class Database
                 DB_NAME,
                 DB_CHARSET
             );
-            $this->connection = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $this->connection = new PDO($dsn, DB_USER, DB_PASS, $this->options);
         } catch (PDOException $e) {
             $this->handleError("Database connection failed", $e);
         }
@@ -117,7 +121,6 @@ class Database
 
             $stmt->execute();
             return $stmt;
-
         } catch (PDOException $e) {
             $this->handleError("Query failed", $e, $sql, $params);
             throw $e;
@@ -220,9 +223,7 @@ class Database
 
     private function handleError(string $message, PDOException $e, ?string $sql = null, ?array $params = null): void
     {
-        // ✅ FIXED: Development mode mein error show karein
         if (ENVIRONMENT === 'development') {
-            // Throw the actual error so we can see it
             throw new PDOException($e->getMessage() . " [SQL: " . $sql . "]");
         }
 
@@ -256,13 +257,16 @@ class SessionManager
 {
     public static function init(): bool
     {
-        $cookieParams = session_get_cookie_params();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            return true;
+        }
 
-        // FIX BUG 3: On localhost HTTP, secure=true breaks session cookies
+        $cookieParams = session_get_cookie_params();
         $isLocalhost = in_array(
             $_SERVER['HTTP_HOST'] ?? '',
             ['localhost', '127.0.0.1', '::1']
         ) || strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
+
         $secure = !$isLocalhost && isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
         $domain = (!$isLocalhost) ? ($cookieParams['domain'] ?? '') : '';
 
@@ -431,7 +435,7 @@ function jsonResponse(bool $success, string $message, array $data = [], int $sta
         'message' => $message,
         'data' => $data,
         'timestamp' => time()
-    ]);
+    ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -443,7 +447,10 @@ function isLoggedIn(): bool
 function getCurrentUserId(): ?int
 {
     $userId = SessionManager::get('user_id');
-    return $userId !== null ? (int)$userId : null;
+    if ($userId === null || $userId === '') {
+        return null;
+    }
+    return (int)$userId;
 }
 
 function isAdminLoggedIn(): bool
@@ -483,3 +490,4 @@ SessionManager::init();
 // ======================================================
 // END OF CONFIGURATION FILE
 // ======================================================
+?>
