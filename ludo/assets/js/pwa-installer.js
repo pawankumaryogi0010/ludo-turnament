@@ -2,7 +2,7 @@
  * ======================================================
  * PWA-INSTALLER.JS - PWA Install Prompt Handler
  * Ludo Tournament Platform - Complete PWA Installer
- * Version: 2.0.0 - COMPLETE
+ * Version: 2.0.0 - FIXED
  * ======================================================
  */
 
@@ -34,11 +34,18 @@ class PWAInstaller {
 
         this.detectIOS();
         
-        // Service Worker registration
+        // ✅ FIXED: Service Worker registration with correct path
         if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/ludo/service-worker.js')
+            // ✅ OPTION 1: Hardcode for ludo folder
+            navigator.serviceWorker.register('/ludo/service-worker.js')
                 .then(reg => console.log('✅ Service Worker registered:', reg))
                 .catch(err => console.error('❌ Service Worker registration failed:', err));
+            
+            // ✅ OPTION 2: Dynamic (works in any folder)
+            // const swPath = window.location.pathname.split('/').slice(0, -1).join('/') + '/service-worker.js';
+            // navigator.serviceWorker.register(swPath)
+            //     .then(reg => console.log('✅ Service Worker registered:', reg))
+            //     .catch(err => console.error('❌ Service Worker registration failed:', err));
         }
     }
 
