@@ -76,8 +76,17 @@ self.addEventListener('fetch', function(event) {
         return;
     }
     
-    if (url.pathname.includes('/api/')) {
-        event.respondWith(fetch(request));
+    // FIX BUG 10: Never cache API requests — always network
+    if (url.pathname.includes('/api/') || 
+        url.pathname.includes('auth.php') ||
+        url.pathname.includes('wallet.php') ||
+        url.pathname.includes('game.php')) {
+        event.respondWith(
+            fetch(request).catch(() => new Response(
+                JSON.stringify({success: false, message: 'No internet connection'}),
+                {status: 503, headers: {'Content-Type': 'application/json'}}
+            ))
+        );
         return;
     }
     
