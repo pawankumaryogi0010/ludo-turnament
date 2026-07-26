@@ -3,7 +3,7 @@
  * ======================================================
  * INDEX.PHP - MAIN ENTRY POINT
  * Ludo Tournament Platform - Complete SPA
- * Version: 4.0.0 - ALL PATHS FIXED
+ * Version: 5.0.0 - COMPLETE FIXED
  * ======================================================
  */
 
@@ -28,7 +28,6 @@ if ($basePath === '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0e1a">
-    <!-- FIXED: Use mobile-web-app-capable instead of deprecated -->
     <meta name="mobile-web-app-capable" content="yes">
     <title>Ludo Tournament Pro - Skill-Based Gaming</title>
 
@@ -36,7 +35,6 @@ if ($basePath === '') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- FIXED: Dynamic CSS path -->
     <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/style.css">
     <link rel="manifest" href="<?php echo $basePath; ?>/manifest.json">
 
@@ -528,7 +526,7 @@ if ($basePath === '') {
                             </div>
                             <div class="form-group checkbox">
                                 <input type="checkbox" id="regTerms" name="terms" required>
-                                <label for="regTerms">I agree to the <a href="terms.php" target="_blank">Terms & Conditions</a> and <a href="privacy.php" target="_blank">Privacy Policy</a></label>
+                                <label for="regTerms">I agree to the <a href="<?php echo $basePath; ?>/terms.php" target="_blank">Terms & Conditions</a> and <a href="<?php echo $basePath; ?>/privacy.php" target="_blank">Privacy Policy</a></label>
                             </div>
                             <button type="submit" class="auth-submit-btn">Register</button>
                             <p class="auth-switch">Already have an account? <a href="#" id="switchToLogin">Login</a></p>
@@ -668,8 +666,8 @@ if ($basePath === '') {
                 if (e.target === e.currentTarget) this.closeAuthModal();
             });
 
-            document.getElementById('termsBtn')?.addEventListener('click', () => window.location.href = 'terms.php');
-            document.getElementById('privacyBtn')?.addEventListener('click', () => window.location.href = 'privacy.php');
+            document.getElementById('termsBtn')?.addEventListener('click', () => window.location.href = this.basePath + '/terms.php');
+            document.getElementById('privacyBtn')?.addEventListener('click', () => window.location.href = this.basePath + '/privacy.php');
         }
 
         showPage(pageId) {
@@ -682,8 +680,8 @@ if ($basePath === '') {
         }
 
         checkAuthStatus() {
-            // FIXED: Use correct API path with basePath
-            fetch(this.basePath + '/api/v1/auth?action=check', { credentials: 'same-origin' })
+            // ✅ FIXED: Correct API path without /v1/
+            fetch(this.basePath + '/api/auth.php?action=check', { credentials: 'same-origin' })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.data.logged_in) {
@@ -788,7 +786,8 @@ if ($basePath === '') {
             btn.textContent = 'Logging in...';
             btn.disabled = true;
 
-            fetch(this.basePath + '/api/v1/auth?action=login', {
+            // ✅ FIXED: Correct API path without /v1/
+            fetch(this.basePath + '/api/auth.php?action=login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -831,7 +830,8 @@ if ($basePath === '') {
             btn.textContent = 'Registering...';
             btn.disabled = true;
 
-            fetch(this.basePath + '/api/v1/auth?action=register', {
+            // ✅ FIXED: Correct API path without /v1/
+            fetch(this.basePath + '/api/auth.php?action=register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -863,7 +863,8 @@ if ($basePath === '') {
 
             const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
 
-            fetch(this.basePath + '/api/v1/auth?action=logout', {
+            // ✅ FIXED: Correct API path without /v1/
+            fetch(this.basePath + '/api/auth.php?action=logout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ csrf_token: csrfToken })
@@ -898,7 +899,8 @@ if ($basePath === '') {
 
             this.showToast('Joining tournament...');
 
-            fetch(this.basePath + '/api/v1/match?action=join', {
+            // ✅ FIXED: Correct API path without /v1/
+            fetch(this.basePath + '/api/match.php?action=join', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
