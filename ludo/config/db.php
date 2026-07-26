@@ -442,7 +442,8 @@ function isLoggedIn(): bool
 
 function getCurrentUserId(): ?int
 {
-    return SessionManager::get('user_id');
+    $userId = SessionManager::get('user_id');
+    return $userId !== null ? (int)$userId : null;
 }
 
 function isAdminLoggedIn(): bool
