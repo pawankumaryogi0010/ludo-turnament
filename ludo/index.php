@@ -3,7 +3,7 @@
  * ======================================================
  * INDEX.PHP - MAIN ENTRY POINT
  * Ludo Tournament Platform - Complete SPA
- * Version: 6.0.0 - COMPLETE FIXED WITH VALIDATION
+ * Version: 7.0.0 - COMPLETE FIXED WITH AUTH HELPER
  * ======================================================
  */
 
@@ -544,6 +544,9 @@ if ($basePath === '') {
 
     <!-- FIXED: Dynamic JS path -->
     <script src="<?php echo $basePath; ?>/assets/js/pwa-installer.js"></script>
+    
+    <!-- ✅ ADD THIS: Auth Helper -->
+    <script src="<?php echo $basePath; ?>/assets/js/auth-helper.js"></script>
 
     <script>
     class App {
@@ -776,19 +779,17 @@ if ($basePath === '') {
         }
 
         // ==============================================
-        // FIXED: handleLogin() with validation
+        // ✅ FIXED: handleLogin() with AuthHelper
         // ==============================================
-        handleLogin() {
+        async handleLogin() {
             const form = document.getElementById('loginForm');
             const formData = new FormData(form);
 
             const data = {
                 mobile: formData.get('mobile'),
-                password: formData.get('password'),
-                csrf_token: document.querySelector('input[name="csrf_token"]')?.value || ''
+                password: formData.get('password')
             };
 
-            // ✅ Client-side validation
             if (!data.mobile || data.mobile.length !== 10) {
                 this.showToast('Please enter a valid 10-digit mobile number');
                 return;
@@ -803,16 +804,8 @@ if ($basePath === '') {
             btn.textContent = 'Logging in...';
             btn.disabled = true;
 
-            fetch(this.basePath + '/api/auth.php?action=login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': data.csrf_token
-                },
-                body: JSON.stringify(data)
-            })
-            .then(res => res.json())
-            .then(result => {
+            try {
+                const result = await AuthHelper.login(data);
                 if (result.success) {
                     this.isLoggedIn = true;
                     this.userData = result.data.user;
@@ -823,20 +816,19 @@ if ($basePath === '') {
                 } else {
                     this.showToast(result.message || 'Login failed');
                 }
-            })
-            .catch(() => {
+            } catch (error) {
+                console.error('Login error:', error);
                 this.showToast('Network error. Please try again.');
-            })
-            .finally(() => {
+            } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
-            });
+            }
         }
 
         // ==============================================
-        // FIXED: handleRegister() with validation
+        // ✅ FIXED: handleRegister() with AuthHelper
         // ==============================================
-        handleRegister() {
+        async handleRegister() {
             const form = document.getElementById('registerForm');
             const termsCheckbox = document.getElementById('regTerms');
 
@@ -852,10 +844,9 @@ if ($basePath === '') {
                 mobile: formData.get('mobile'),
                 password: formData.get('password'),
                 referral_code: formData.get('referral_code') || '',
-                csrf_token: document.querySelector('input[name="csrf_token"]')?.value || ''
+                email: formData.get('email') || ''
             };
 
-            // ✅ Client-side validation
             if (!data.username || data.username.length < 3) {
                 this.showToast('Username must be at least 3 characters');
                 return;
@@ -868,7 +859,6 @@ if ($basePath === '') {
                 this.showToast('Password must be at least 8 characters');
                 return;
             }
-            // ✅ Password strength check
             if (!/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/[0-9]/.test(data.password)) {
                 this.showToast('Password must contain at least one uppercase, one lowercase, and one number');
                 return;
@@ -879,16 +869,8 @@ if ($basePath === '') {
             btn.textContent = 'Registering...';
             btn.disabled = true;
 
-            fetch(this.basePath + '/api/auth.php?action=register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': data.csrf_token
-                },
-                body: JSON.stringify(data)
-            })
-            .then(res => res.json())
-            .then(result => {
+            try {
+                const result = await AuthHelper.register(data);
                 if (result.success) {
                     this.isLoggedIn = true;
                     this.userData = result.data.user;
@@ -899,43 +881,36 @@ if ($basePath === '') {
                 } else {
                     this.showToast(result.message || 'Registration failed');
                 }
-            })
-            .catch(() => {
+            } catch (error) {
+                console.error('Register error:', error);
                 this.showToast('Network error. Please try again.');
-            })
-            .finally(() => {
+            } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
-            });
+            }
         }
 
         // ==============================================
-        // FIXED: handleLogout() with CSRF
+        // ✅ FIXED: handleLogout() with AuthHelper
         // ==============================================
-        handleLogout() {
+        async handleLogout() {
             if (!confirm('Are you sure you want to logout?')) return;
 
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
-
-            fetch(this.basePath + '/api/auth.php?action=logout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify({ csrf_token: csrfToken })
-            })
-            .then(res => res.json())
-            .then(() => {
-                this.isLoggedIn = false;
-                this.userData = null;
-                this.updateAuthUI(false);
-                this.showToast('Logged out successfully');
-                localStorage.removeItem('userData');
-            })
-            .catch(() => {
-                this.showToast('Logout failed');
-            });
+            try {
+                const result = await AuthHelper.logout();
+                if (result.success) {
+                    this.isLoggedIn = false;
+                    this.userData = null;
+                    this.updateAuthUI(false);
+                    this.showToast('Logged out successfully');
+                    localStorage.removeItem('userData');
+                } else {
+                    this.showToast(result.message || 'Logout failed');
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                this.showToast('Network error. Please try again.');
+            }
         }
 
         // ==============================================
