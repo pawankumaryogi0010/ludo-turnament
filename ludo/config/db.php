@@ -21,7 +21,7 @@ if (file_exists($envFile)) {
 
 define('ENVIRONMENT', $env['ENVIRONMENT'] ?? 'production');
 define('DB_HOST', $env['DB_HOST'] ?? 'localhost');
-define('DB_NAME', $env['DB_NAME'] ?? 'ludo_tournament_db');
+define('DB_NAME', $env['ludo_tournament'] ?? 'ludo_tournament_db');
 define('DB_USER', $env['DB_USER'] ?? 'ludo_user');
 define('DB_PASS', $env['DB_PASS'] ?? '');
 define('DB_CHARSET', 'utf8mb4');
