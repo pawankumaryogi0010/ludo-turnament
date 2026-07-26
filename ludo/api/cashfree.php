@@ -23,9 +23,16 @@ header('X-Frame-Options: DENY');
 // ==============================================
 // CASHFREE CONFIGURATION
 // ==============================================
-define('CASHFREE_APP_ID', 'YOUR_CASHFREE_APP_ID'); // Replace with actual
-define('CASHFREE_SECRET_KEY', 'YOUR_CASHFREE_SECRET_KEY'); // Replace with actual
-define('CASHFREE_ENVIRONMENT', 'test'); // 'test' or 'production'
+// FIX BUG 7: Load from env file — never hardcode keys
+define('CASHFREE_APP_ID', $_ENV['CASHFREE_APP_ID'] ?? getenv('CASHFREE_APP_ID') ?? '');
+define('CASHFREE_SECRET_KEY', $_ENV['CASHFREE_SECRET_KEY'] ?? getenv('CASHFREE_SECRET_KEY') ?? '');
+define('CASHFREE_ENVIRONMENT', $_ENV['CASHFREE_ENV'] ?? getenv('CASHFREE_ENV') ?? 'test');
+
+// Safety check — abort if keys not configured
+if (empty(CASHFREE_APP_ID) || empty(CASHFREE_SECRET_KEY)) {
+    error_log('[Cashfree] ERROR: API keys not configured in environment');
+    // Only block on production payment actions, not webhook verification
+}
 
 // API Endpoints
 if (CASHFREE_ENVIRONMENT === 'production') {
