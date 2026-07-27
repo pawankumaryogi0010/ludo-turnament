@@ -506,18 +506,5 @@ function handleCheckAuth(): void
     }
 }
 
-// ==============================================
-// ✅ Helper: JSON Response
-// ==============================================
-function jsonResponse(bool $success, string $message, array $data = [], int $statusCode = 200): void
-{
-    http_response_code($statusCode);
-    echo json_encode([
-        'success' => $success,
-        'message' => $message,
-        'data' => $data,
-        'timestamp' => time()
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+// Note: jsonResponse is provided by config/db.php to avoid duplicate definitions
 ?>
