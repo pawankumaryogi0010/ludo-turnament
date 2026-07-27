@@ -338,7 +338,8 @@ const AuthHelper = (() => {
         getCsrfToken,
         getCurrentUser,
         isLoggedIn,
-        getUserId
+        getUserId,
+        API_BASE // expose for debugging/other scripts
     };
 })();
 
