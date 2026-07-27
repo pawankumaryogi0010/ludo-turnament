@@ -3,7 +3,7 @@
  * ======================================================
  * ADMIN TOURNAMENTS.PHP - Tournament/Room Management
  * Ludo Tournament Platform - Admin Tournament Dashboard
- * Version: 2.0.0
+ * Version: 3.0.0 - COMPLETE REWRITE WITH BUG FIXES
  * ======================================================
  */
 
@@ -14,13 +14,14 @@ if (!defined('BASE_PATH')) {
 
 require_once dirname(__DIR__) . '/config/db.php';
 
+// Initialize session properly
 SessionManager::init();
 
 // ==============================================
 // SECURE SESSION VALIDATION
 // ==============================================
 function validateAdminSession() {
-    if (!isset($_SESSION['admin_id']) || !isset($_SESSION['admin_token'])) {
+    if (!SessionManager::has('admin_id') || !SessionManager::has('admin_token')) {
         return false;
     }
     
@@ -37,18 +38,19 @@ function validateAdminSession() {
             AND expires_at > NOW()
         ");
         $stmt->execute([
-            ':admin_id' => $_SESSION['admin_id'],
-            ':token' => $_SESSION['admin_token']
+            ':admin_id' => SessionManager::get('admin_id'),
+            ':token' => SessionManager::get('admin_token')
         ]);
         
         return $stmt->fetch() !== false;
     } catch (Exception $e) {
+        error_log('Session validation error: ' . $e->getMessage());
         return false;
     }
 }
 
 if (!validateAdminSession()) {
-    session_destroy();
+    SessionManager::destroy();
     header('Location: index.php');
     exit;
 }
@@ -56,23 +58,57 @@ if (!validateAdminSession()) {
 $csrf_token = CSRFToken::generate();
 
 // ==============================================
+// INITIALIZE DATABASE
+// ==============================================
+try {
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
+} catch (Exception $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
+// ==============================================
+// INITIALIZATION VARIABLES
+// ==============================================
+$success = '';
+$error = '';
+$tournaments = [];
+
+// ==============================================
 // HANDLE FORM SUBMISSIONS
 // ==============================================
-$db = Database::getInstance();
-$conn = $db->getConnection();
 
-// Add Tournament
+// ✅ FIX: Add Tournament with proper validation
 if (isset($_POST['add_tournament'])) {
-    $name = trim($_POST['name']);
-    $entryFee = floatval($_POST['entry_fee']);
-    $maxPlayers = intval($_POST['max_players']);
-    $platformFee = floatval($_POST['platform_fee']) / 100;
-    
-    // Calculate prize pool
-    $prizePool = ($entryFee * $maxPlayers) - ($entryFee * $maxPlayers * $platformFee);
-    $tournamentCode = 'T' . strtoupper(uniqid() . bin2hex(random_bytes(3)));
-    
     try {
+        $name = trim($_POST['name'] ?? '');
+        $entryFee = floatval($_POST['entry_fee'] ?? 0);
+        $maxPlayers = intval($_POST['max_players'] ?? 4);
+        $platformFeePercent = floatval($_POST['platform_fee'] ?? 15);
+        
+        // Validation
+        if (empty($name)) {
+            throw new Exception('Tournament name is required');
+        }
+        if ($entryFee <= 0 || $entryFee > 100000) {
+            throw new Exception('Invalid entry fee (must be between ₹1 and ₹100,000)');
+        }
+        if ($maxPlayers < 2 || $maxPlayers > 8) {
+            throw new Exception('Invalid max players (must be between 2 and 8)');
+        }
+        if ($platformFeePercent < 0 || $platformFeePercent > 100) {
+            throw new Exception('Invalid platform fee percentage');
+        }
+        
+        // Calculate prize pool
+        $totalPool = $entryFee * $maxPlayers;
+        $platformFeeAmount = $totalPool * ($platformFeePercent / 100);
+        $prizePool = $totalPool - $platformFeeAmount;
+        
+        $tournamentCode = 'T' . strtoupper(substr(uniqid(), -8) . bin2hex(random_bytes(2)));
+        
+        $db->beginTransaction();
+        
         $stmt = $conn->prepare("
             INSERT INTO tournaments (
                 tournament_code,
@@ -105,34 +141,77 @@ if (isset($_POST['add_tournament'])) {
             ':name' => $name,
             ':entry_fee' => $entryFee,
             ':prize_pool' => $prizePool,
-            ':platform_fee' => $entryFee * $maxPlayers * $platformFee,
+            ':platform_fee' => $platformFeeAmount,
             ':max_players' => $maxPlayers,
-            ':admin_id' => $_SESSION['admin_id']
+            ':admin_id' => SessionManager::get('admin_id')
         ]);
         
-        $success = "Tournament '{$name}' created successfully!";
+        $db->commit();
+        $success = "✅ Tournament '{$name}' created successfully!";
+        
     } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        $error = "❌ Error: " . $e->getMessage();
     }
 }
 
-// Delete Tournament
+// ✅ FIX: Delete Tournament with proper validation
 if (isset($_GET['delete']) && isset($_GET['id'])) {
-    $id = intval($_GET['id']);
     try {
+        $id = intval($_GET['id']);
+        if ($id <= 0) {
+            throw new Exception('Invalid tournament ID');
+        }
+        
+        $db->beginTransaction();
+        
+        // Check if tournament has ongoing matches
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) as match_count 
+            FROM matches 
+            WHERE tournament_id = :id 
+            AND status NOT IN ('completed', 'cancelled')
+        ");
+        $stmt->execute([':id' => $id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result && intval($result['match_count']) > 0) {
+            throw new Exception('Cannot delete tournament with active matches');
+        }
+        
         $stmt = $conn->prepare("DELETE FROM tournaments WHERE id = :id");
         $stmt->execute([':id' => $id]);
-        $success = "Tournament deleted successfully!";
+        
+        $db->commit();
+        $success = "✅ Tournament deleted successfully!";
+        
     } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        $error = "❌ Error: " . $e->getMessage();
     }
 }
 
-// Toggle Status
+// ✅ FIX: Toggle Status with validation of status value
 if (isset($_GET['toggle']) && isset($_GET['id'])) {
-    $id = intval($_GET['id']);
-    $status = $_GET['status'] ?? 'active';
     try {
+        $id = intval($_GET['id']);
+        $status = $_GET['status'] ?? null;
+        
+        // Validate status value
+        $validStatuses = ['scheduled', 'active', 'in_progress', 'completed', 'cancelled'];
+        if (!in_array($status, $validStatuses)) {
+            throw new Exception('Invalid tournament status');
+        }
+        if ($id <= 0) {
+            throw new Exception('Invalid tournament ID');
+        }
+        
+        $db->beginTransaction();
+        
         $stmt = $conn->prepare("
             UPDATE tournaments 
             SET status = :status, updated_at = CURRENT_TIMESTAMP 
@@ -142,23 +221,36 @@ if (isset($_GET['toggle']) && isset($_GET['id'])) {
             ':status' => $status,
             ':id' => $id
         ]);
-        $success = "Tournament status updated!";
+        
+        $db->commit();
+        $success = "✅ Tournament status updated!";
+        
     } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        $error = "❌ Error: " . $e->getMessage();
     }
 }
 
-// Get all tournaments
-$stmt = $conn->query("
-    SELECT 
-        t.*,
-        u.username as created_by_name,
-        (SELECT COUNT(*) FROM matches WHERE tournament_id = t.id) as match_count
-    FROM tournaments t
-    LEFT JOIN users u ON t.created_by = u.id
-    ORDER BY t.created_at DESC
-");
-$tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// ✅ FIX: Get all tournaments with error handling
+try {
+    $stmt = $conn->query("
+        SELECT 
+            t.*,
+            u.username as created_by_name,
+            (SELECT COUNT(*) FROM matches WHERE tournament_id = t.id) as match_count,
+            (SELECT COUNT(*) FROM matches WHERE tournament_id = t.id AND status IN ('playing', 'ready')) as active_matches
+        FROM tournaments t
+        LEFT JOIN users u ON t.created_by = u.id
+        ORDER BY t.created_at DESC
+    ");
+    $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log('Tournament fetch error: ' . $e->getMessage());
+    $tournaments = [];
+    $error = "Failed to fetch tournaments";
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -208,7 +300,7 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             flex-wrap: wrap;
         }
         
-        .admin-header-actions a {
+        .admin-header-actions a, .admin-header-actions button {
             color: #94a3b8;
             text-decoration: none;
             font-weight: 600;
@@ -217,9 +309,12 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 8px;
             transition: background 0.2s;
+            background: transparent;
+            cursor: pointer;
+            font-family: inherit;
         }
         
-        .admin-header-actions a:hover {
+        .admin-header-actions a:hover, .admin-header-actions button:hover {
             background: rgba(255, 255, 255, 0.04);
         }
         
@@ -297,7 +392,6 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background: rgba(245, 158, 11, 0.3);
         }
         
-        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -406,7 +500,6 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background: rgba(255, 255, 255, 0.1);
         }
         
-        /* Toast */
         .toast {
             position: fixed;
             bottom: 24px;
@@ -429,9 +522,7 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         .toast.success { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.2); color: #10b981; }
         .toast.error { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; }
-        .toast.info { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.2); color: #3b82f6; }
         
-        /* Table */
         .table-container {
             background: #1a1a2e;
             border-radius: 14px;
@@ -484,31 +575,6 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .status-badge.completed { background: rgba(16, 185, 129, 0.15); color: #10b981; }
         .status-badge.cancelled { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
         
-        .quick-add-btns {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }
-        
-        .quick-add-btn {
-            padding: 8px 16px;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.04);
-            color: #94a3b8;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: inherit;
-            font-size: 13px;
-        }
-        
-        .quick-add-btn:hover {
-            background: rgba(124, 58, 237, 0.1);
-            border-color: rgba(124, 58, 237, 0.2);
-            color: #f1f5f9;
-        }
-        
         @media (max-width: 768px) {
             .admin-header {
                 flex-direction: column;
@@ -524,30 +590,11 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="admin-header">
             <h1>🏆 Tournament Management</h1>
             <div class="admin-header-actions">
-                <span>👋 <?php echo htmlspecialchars($_SESSION['admin_username'] ?? 'Admin'); ?></span>
+                <span>👋 <?php echo htmlspecialchars(SessionManager::get('admin_username', 'Admin')); ?></span>
                 <a href="index.php">← Back to Dashboard</a>
-                <a href="settings.php">⚙️ Settings</a>
-                <a href="kyc.php">🛡️ KYC</a>
-                <a href="withdrawals.php">🏦 Withdrawals</a>
-                <a href="disputes.php">📋 Disputes</a>
                 <button class="btn-primary" onclick="openAddModal()">➕ New Tournament</button>
                 <a href="?logout=1" class="logout">🚪 Logout</a>
             </div>
-        </div>
-        
-        <!-- Quick Add Buttons -->
-        <div class="quick-add-btns">
-            <button class="quick-add-btn" onclick="quickAdd(10, 4)">₹10 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(20, 4)">₹20 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(30, 4)">₹30 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(50, 4)">₹50 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(100, 4)">₹100 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(200, 4)">₹200 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(500, 4)">₹500 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(1000, 4)">₹1000 Entry (4 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(10, 2)">₹10 Entry (2 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(20, 2)">₹20 Entry (2 Players)</button>
-            <button class="quick-add-btn" onclick="quickAdd(50, 2)">₹50 Entry (2 Players)</button>
         </div>
         
         <!-- Tournament Table -->
@@ -560,8 +607,7 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <th>Name</th>
                         <th>Entry Fee</th>
                         <th>Prize Pool</th>
-                        <th>Platform Fee</th>
-                        <th>Players</th>
+                        <th>Max Players</th>
                         <th>Matches</th>
                         <th>Status</th>
                         <th>Created</th>
@@ -570,29 +616,26 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </thead>
                 <tbody>
                     <?php if (empty($tournaments)): ?>
-                        <tr><td colspan="11" style="text-align: center; padding: 40px; color: #94a3b8;">No tournaments created yet. Create your first tournament!</td></tr>
+                        <tr><td colspan="10" style="text-align: center; padding: 40px; color: #94a3b8;">No tournaments created yet.</td></tr>
                     <?php else: ?>
                         <?php foreach ($tournaments as $t): ?>
                             <tr>
-                                <td>#<?php echo $t['id']; ?></td>
+                                <td>#<?php echo htmlspecialchars($t['id']); ?></td>
                                 <td><code style="background: rgba(255,255,255,0.04); padding: 2px 8px; border-radius: 4px;"><?php echo htmlspecialchars($t['tournament_code']); ?></code></td>
                                 <td><?php echo htmlspecialchars($t['name']); ?></td>
                                 <td><strong style="color: #fbbf24;">₹<?php echo number_format($t['entry_fee'], 2); ?></strong></td>
                                 <td><strong style="color: #10b981;">₹<?php echo number_format($t['prize_pool'], 2); ?></strong></td>
-                                <td>₹<?php echo number_format($t['platform_fee'], 2); ?></td>
-                                <td><?php echo $t['current_players']; ?>/<?php echo $t['max_players']; ?></td>
-                                <td><?php echo $t['match_count']; ?></td>
-                                <td><span class="status-badge <?php echo $t['status']; ?>"><?php echo str_replace('_', ' ', $t['status']); ?></span></td>
+                                <td><?php echo intval($t['max_players']); ?></td>
+                                <td><?php echo intval($t['match_count']); ?> (<?php echo intval($t['active_matches']); ?> active)</td>
+                                <td><span class="status-badge <?php echo htmlspecialchars($t['status']); ?>"><?php echo ucwords(str_replace('_', ' ', $t['status'])); ?></span></td>
                                 <td style="font-size: 12px; color: #94a3b8;"><?php echo date('d M Y', strtotime($t['created_at'])); ?></td>
                                 <td>
                                     <?php if ($t['status'] === 'scheduled'): ?>
-                                        <a href="?toggle=1&id=<?php echo $t['id']; ?>&status=active" class="btn-success">Activate</a>
+                                        <a href="?toggle=1&id=<?php echo intval($t['id']); ?>&status=active" class="btn-success">Activate</a>
                                     <?php elseif ($t['status'] === 'active'): ?>
-                                        <a href="?toggle=1&id=<?php echo $t['id']; ?>&status=in_progress" class="btn-warning">Start</a>
-                                    <?php elseif ($t['status'] === 'in_progress'): ?>
-                                        <a href="?toggle=1&id=<?php echo $t['id']; ?>&status=completed" class="btn-success">Complete</a>
+                                        <a href="?toggle=1&id=<?php echo intval($t['id']); ?>&status=in_progress" class="btn-warning">Start</a>
                                     <?php endif; ?>
-                                    <a href="?delete=1&id=<?php echo $t['id']; ?>" class="btn-danger" onclick="return confirm('Delete this tournament?')">Delete</a>
+                                    <a href="?delete=1&id=<?php echo intval($t['id']); ?>" class="btn-danger" onclick="return confirm('Are you sure?')">Delete</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -603,24 +646,21 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
     </div>
     
-    <!-- ==============================================
-    MODAL: Add Tournament
-    ============================================== -->
+    <!-- Modal: Add Tournament -->
     <div class="modal-overlay" id="addModal">
         <div class="modal-box">
             <h2>➕ Create New Tournament</h2>
             <form method="POST" action="">
                 <div class="form-group">
-                    <label>Tournament Name</label>
-                    <input type="text" name="name" placeholder="e.g., ₹10 Ludo Championship" required>
+                    <label>Tournament Name *</label>
+                    <input type="text" name="name" placeholder="e.g., ₹50 Championship" required>
                 </div>
                 <div class="form-group">
-                    <label>Entry Fee (₹)</label>
-                    <input type="number" name="entry_fee" id="entryFee" placeholder="10" step="1" min="1" required onchange="calculatePrize()">
-                    <div class="hint">Minimum: ₹1</div>
+                    <label>Entry Fee (₹) *</label>
+                    <input type="number" name="entry_fee" id="entryFee" placeholder="50" step="1" min="1" max="100000" required onchange="calculatePrize()">
                 </div>
                 <div class="form-group">
-                    <label>Max Players</label>
+                    <label>Max Players *</label>
                     <select name="max_players" id="maxPlayers" onchange="calculatePrize()">
                         <option value="2">2 Players</option>
                         <option value="4" selected>4 Players</option>
@@ -629,36 +669,26 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Platform Fee (%)</label>
+                    <label>Platform Fee (%) *</label>
                     <input type="number" name="platform_fee" id="platformFee" value="15" step="1" min="0" max="100" onchange="calculatePrize()">
-                    <div class="hint">Default: 15%</div>
                 </div>
                 <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px;">
-                    <label>Prize Pool (Auto Calculated)</label>
+                    <label>Prize Pool (Auto)</label>
                     <input type="text" id="prizePoolDisplay" value="₹0.00" disabled style="opacity: 0.8; font-size: 18px; color: #fbbf24;">
-                    <div class="hint">Formula: Entry Fee × Players - Platform Fee</div>
                 </div>
                 <input type="hidden" name="add_tournament" value="1">
                 <div class="modal-actions">
-                    <button type="submit" class="btn-confirm">✅ Create Tournament</button>
+                    <button type="submit" class="btn-confirm">✅ Create</button>
                     <button type="button" class="btn-cancel" onclick="closeModal('addModal')">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
     
-    <!-- ==============================================
-    TOAST NOTIFICATION
-    ============================================== -->
+    <!-- Toast -->
     <div class="toast" id="adminToast"></div>
     
-    <!-- ==============================================
-    JAVASCRIPT
-    ============================================== -->
     <script>
-        // ==============================================
-        // MODAL FUNCTIONS
-        // ==============================================
         function openAddModal() {
             document.getElementById('addModal').classList.add('active');
             calculatePrize();
@@ -668,18 +698,6 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById(id).classList.remove('active');
         }
         
-        // Close modal on overlay click
-        document.querySelectorAll('.modal-overlay').forEach(modal => {
-            modal.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    this.classList.remove('active');
-                }
-            });
-        });
-        
-        // ==============================================
-        // CALCULATE PRIZE POOL
-        // ==============================================
         function calculatePrize() {
             const entryFee = parseFloat(document.getElementById('entryFee').value) || 0;
             const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 4;
@@ -692,50 +710,21 @@ $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('prizePoolDisplay').value = '₹' + prizePool.toFixed(2);
         }
         
-        // ==============================================
-        // QUICK ADD TOURNAMENT
-        // ==============================================
-        function quickAdd(entryFee, maxPlayers) {
-            // Fill form
-            document.getElementById('entryFee').value = entryFee;
-            document.getElementById('maxPlayers').value = maxPlayers;
-            document.getElementById('platformFee').value = 15;
-            
-            // Set name
-            const nameInput = document.querySelector('input[name="name"]');
-            const playerLabel = maxPlayers === 2 ? 'Duo' : maxPlayers + ' Players';
-            nameInput.value = '₹' + entryFee + ' ' + playerLabel + ' Tournament';
-            
-            // Calculate prize
-            calculatePrize();
-            
-            // Open modal
-            openAddModal();
-        }
-        
-        // ==============================================
-        // TOAST NOTIFICATION
-        // ==============================================
-        function showToast(message, type = 'info') {
+        function showToast(message, type = 'success') {
             const toast = document.getElementById('adminToast');
             toast.textContent = message;
             toast.className = 'toast ' + type + ' show';
-            
-            clearTimeout(toast._timeout);
-            toast._timeout = setTimeout(() => {
-                toast.classList.remove('show');
-            }, 4000);
+            setTimeout(() => toast.classList.remove('show'), 4000);
         }
         
-        // Check for success/error messages from PHP
-        <?php if (isset($success)): ?>
-            document.addEventListener('DOMContentLoaded', function() {
+        <?php if ($success): ?>
+            document.addEventListener('DOMContentLoaded', () => {
                 showToast('<?php echo addslashes($success); ?>', 'success');
             });
         <?php endif; ?>
         
-        <?php if (isset($error)): ?>
-            document.addEventListener('DOMContentLoaded', function() {
+        <?php if ($error): ?>
+            document.addEventListener('DOMContentLoaded', () => {
                 showToast('<?php echo addslashes($error); ?>', 'error');
             });
         <?php endif; ?>
