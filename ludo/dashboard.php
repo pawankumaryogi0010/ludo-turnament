@@ -3,7 +3,7 @@
  * ======================================================
  * DASHBOARD.PHP - User Dashboard
  * Ludo Tournament Platform - Complete Dashboard
- * Version: 3.2.0 - PATHS FIXED
+ * Version: 4.0.0 - COMPLETE REWRITE WITH ALL FIXES
  * ======================================================
  */
 
@@ -13,6 +13,7 @@ if (!defined('BASE_PATH')) {
 
 require_once __DIR__ . '/config/db.php';
 
+// ✅ FIX: Check login before anything else
 if (!isLoggedIn()) {
     header('Location: index.php');
     exit;
@@ -20,101 +21,160 @@ if (!isLoggedIn()) {
 
 $userId = getCurrentUserId();
 
-$db = Database::getInstance();
-$conn = $db->getConnection();
+// ✅ FIX: Validate userId
+if (!$userId || $userId <= 0) {
+    session_destroy();
+    header('Location: index.php');
+    exit;
+}
 
-// ✅ FIXED: User query with proper error handling
+// ✅ FIX: Initialize database with error handling
+try {
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
+} catch (Exception $e) {
+    error_log('Dashboard DB connection error: ' . $e->getMessage());
+    die("Database connection failed. Please try again later.");
+}
+
+// ============================================== 
+// FETCH USER DATA WITH PROPER ERROR HANDLING
+// ==============================================
+$user = null;
 try {
     $stmt = $conn->prepare("
         SELECT
             id, username, mobile, email, wallet_balance,
             total_matches_played, total_matches_won, total_earnings,
             elo_rating, is_verified, kyc_status, is_active,
-            refer_code, referral_earnings, created_at
+            refer_code, referral_earnings, created_at, last_login
         FROM users
-        WHERE id = ?
+        WHERE id = :user_id
+        LIMIT 1
     ");
-    $stmt->execute([$userId]);
+    $stmt->execute([':user_id' => $userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // ✅ FIX: Check if user exists
+    if (!$user) {
+        error_log("User not found: $userId");
+        session_destroy();
+        header('Location: index.php');
+        exit;
+    }
+    
+    // ✅ FIX: Check if user is active
+    if ($user['is_active'] != 1) {
+        error_log("Inactive user attempting access: $userId");
+        session_destroy();
+        header('Location: index.php?reason=account_inactive');
+        exit;
+    }
+    
 } catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
+    error_log('User fetch error: ' . $e->getMessage());
+    die("Error loading user profile. Please try again later.");
+} catch (Exception $e) {
+    error_log('Unexpected error in user fetch: ' . $e->getMessage());
+    die("An unexpected error occurred. Please try again later.");
 }
 
-if (!$user || $user['is_active'] != 1) {
-    session_destroy();
-    header('Location: index.php');
-    exit;
-}
-
-// ✅ FIXED: Active match query with positional placeholders
+// ============================================== 
+// FETCH ACTIVE MATCH WITH ERROR HANDLING
+// ==============================================
+$activeMatch = null;
 try {
     $stmt = $conn->prepare("
         SELECT
             id, room_code, entry_fee, prize_pool, status,
-            player1_name, player2_name, current_turn_id,
-            turn_number, created_at
+            player1_id, player2_id, player1_name, player2_name,
+            current_turn_id, turn_number, created_at, updated_at
         FROM matches
-        WHERE (player1_id = ? OR player2_id = ?)
+        WHERE (player1_id = :user_id OR player2_id = :user_id)
         AND status IN ('waiting', 'ready', 'playing')
         ORDER BY created_at DESC
         LIMIT 1
     ");
-    $stmt->execute([$userId, $userId]);
+    $stmt->execute([':user_id' => $userId]);
     $activeMatch = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
+    error_log('Active match fetch error: ' . $e->getMessage());
+    $activeMatch = null;
+} catch (Exception $e) {
+    error_log('Unexpected error in active match fetch: ' . $e->getMessage());
     $activeMatch = null;
 }
 
-// ✅ FIXED: Recent matches query
+// ============================================== 
+// FETCH RECENT MATCHES WITH ERROR HANDLING
+// ==============================================
+$recentMatches = [];
 try {
     $stmt = $conn->prepare("
         SELECT
             id, room_code, entry_fee, prize_pool, status,
-            player1_name, player2_name, winner_name,
-            winning_amount, created_at, completed_at,
-            CASE WHEN winner_id = ? THEN 'won' ELSE 'lost' END as result
+            player1_id, player2_id, player1_name, player2_name,
+            winner_id, winner_name, winning_amount,
+            created_at, completed_at,
+            CASE WHEN winner_id = :user_id THEN 'won' ELSE 'lost' END as result
         FROM matches
-        WHERE (player1_id = ? OR player2_id = ?)
+        WHERE (player1_id = :user_id OR player2_id = :user_id)
         AND status IN ('completed', 'cancelled')
         ORDER BY created_at DESC
         LIMIT 5
     ");
-    $stmt->execute([$userId, $userId, $userId]);
-    $recentMatches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute([':user_id' => $userId]);
+    $recentMatches = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
+    error_log('Recent matches fetch error: ' . $e->getMessage());
+    $recentMatches = [];
+} catch (Exception $e) {
+    error_log('Unexpected error in recent matches fetch: ' . $e->getMessage());
     $recentMatches = [];
 }
 
-// ✅ FIXED: Transactions query
+// ============================================== 
+// FETCH RECENT TRANSACTIONS WITH ERROR HANDLING
+// ==============================================
+$recentTransactions = [];
 try {
     $stmt = $conn->prepare("
         SELECT
             id, amount, type, source, description,
-            order_id, status, created_at
+            order_id, status, created_at, updated_at
         FROM transactions
-        WHERE user_id = ?
+        WHERE user_id = :user_id
         ORDER BY created_at DESC
         LIMIT 5
     ");
-    $stmt->execute([$userId]);
-    $recentTransactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute([':user_id' => $userId]);
+    $recentTransactions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
+    error_log('Transactions fetch error: ' . $e->getMessage());
+    $recentTransactions = [];
+} catch (Exception $e) {
+    error_log('Unexpected error in transactions fetch: ' . $e->getMessage());
     $recentTransactions = [];
 }
 
-// ✅ FIXED: CSRF token generation with fallback
-if (class_exists('CSRFToken')) {
-    $csrf_token = CSRFToken::generate();
-} else {
-    // Fallback CSRF token
-    $csrf_token = bin2hex(random_bytes(32));
+// ✅ FIX: Generate CSRF token
+if (!isset($_SESSION['csrf_token']) || empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+$csrf_token = $_SESSION['csrf_token'];
 
 // Dynamic base path detection
 $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
 if ($basePath === '') {
     $basePath = '';
 }
+
+// ✅ FIX: Safe conversions for display
+$walletBalance = floatval($user['wallet_balance'] ?? 0);
+$totalMatches = intval($user['total_matches_played'] ?? 0);
+$totalWins = intval($user['total_matches_won'] ?? 0);
+$totalEarnings = floatval($user['total_earnings'] ?? 0);
+$eloRating = intval($user['elo_rating'] ?? 1200);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -128,7 +188,7 @@ if ($basePath === '') {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($basePath); ?>/assets/css/style.css">
     <style>
         .dashboard-wrapper {
             max-width: 480px;
@@ -147,43 +207,94 @@ if ($basePath === '') {
             margin-bottom: 20px;
         }
 
-        .dashboard-header .user-info { display: flex; align-items: center; gap: 12px; }
+        .dashboard-header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
         .dashboard-header .avatar {
-            width: 44px; height: 44px; border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
             background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; font-weight: 700; color: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a1a2e;
             text-transform: uppercase;
         }
 
-        .dashboard-header .user-name { font-size: 16px; font-weight: 700; color: #f1f5f9; }
-        .dashboard-header .user-id { font-size: 12px; color: #94a3b8; }
-
-        .dashboard-header .logout-btn {
-            padding: 6px 16px; border: 1px solid rgba(239,68,68,0.2);
-            border-radius: 8px; background: transparent; color: #ef4444;
-            font-size: 13px; font-weight: 600; cursor: pointer;
-            transition: background 0.2s; font-family: inherit; text-decoration: none;
+        .dashboard-header .user-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f1f5f9;
         }
 
-        .dashboard-header .logout-btn:hover { background: rgba(239,68,68,0.1); }
+        .dashboard-header .user-id {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .dashboard-header .logout-btn {
+            padding: 6px 16px;
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: 8px;
+            background: transparent;
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: inherit;
+            text-decoration: none;
+        }
+
+        .dashboard-header .logout-btn:hover {
+            background: rgba(239,68,68,0.1);
+        }
 
         .wallet-card {
             background: linear-gradient(135deg, rgba(251,191,36,0.1), rgba(124,58,237,0.1));
             border: 1px solid rgba(251,191,36,0.15);
-            border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 20px;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
         }
 
-        .wallet-card .balance { font-size: 36px; font-weight: 900; color: #fbbf24; }
-        .wallet-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .wallet-card .balance {
+            font-size: 36px;
+            font-weight: 900;
+            color: #fbbf24;
+        }
 
-        .wallet-card .actions { display: flex; gap: 12px; margin-top: 12px; justify-content: center; }
+        .wallet-card .label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .wallet-card .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            justify-content: center;
+        }
 
         .wallet-card .actions .btn {
-            padding: 8px 24px; border: none; border-radius: 8px;
-            font-weight: 600; font-size: 13px; cursor: pointer;
-            transition: transform 0.2s; font-family: inherit; text-decoration: none;
+            padding: 8px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-family: inherit;
+            text-decoration: none;
         }
 
         .wallet-card .actions .btn-primary {
@@ -193,187 +304,287 @@ if ($basePath === '') {
 
         .wallet-card .actions .btn-secondary {
             background: rgba(255,255,255,0.06);
-            color: #f1f5f9; border: 1px solid rgba(255,255,255,0.08);
+            color: #f1f5f9;
+            border: 1px solid rgba(255,255,255,0.08);
         }
 
-        .wallet-card .actions .btn:hover { transform: scale(1.04); }
+        .wallet-card .actions .btn:hover {
+            transform: scale(1.04);
+        }
 
         .stats-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr);
-            gap: 8px; margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
         }
 
         .stats-grid .stat {
-            background: #1a1a2e; padding: 12px 8px; border-radius: 12px;
-            text-align: center; border: 1px solid rgba(255,255,255,0.04);
+            background: #1a1a2e;
+            padding: 12px 8px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.04);
         }
 
-        .stats-grid .stat .value { font-size: 18px; font-weight: 800; color: #f1f5f9; }
-        .stats-grid .stat .label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.3px; }
+        .stats-grid .stat .value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #f1f5f9;
+        }
+
+        .stats-grid .stat .label {
+            font-size: 10px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
         .stats-grid .stat .value.gold { color: #fbbf24; }
         .stats-grid .stat .value.green { color: #10b981; }
         .stats-grid .stat .value.blue { color: #3b82f6; }
         .stats-grid .stat .value.purple { color: #8b5cf6; }
 
-        .section { margin-bottom: 20px; }
-
-        .section-header {
-            display: flex; justify-content: space-between;
-            align-items: center; margin-bottom: 12px;
+        .section {
+            margin-bottom: 20px;
         }
 
-        .section-header h3 { font-size: 16px; font-weight: 700; color: #f1f5f9; }
-        .section-header a { font-size: 12px; color: #8b5cf6; text-decoration: none; font-weight: 600; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .section-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .section-header a {
+            font-size: 12px;
+            color: #8b5cf6;
+            text-decoration: none;
+            font-weight: 600;
+        }
 
         .active-match {
-            background: #1a1a2e; border-radius: 12px; padding: 16px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 16px;
             border: 1px solid rgba(251,191,36,0.15);
             border-left: 4px solid #fbbf24;
         }
 
-        .active-match .room-code { font-size: 14px; font-weight: 700; color: #fbbf24; }
+        .active-match .room-code {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fbbf24;
+        }
 
         .active-match .details {
-            display: flex; gap: 16px; margin-top: 8px;
-            font-size: 13px; color: #94a3b8;
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+            font-size: 13px;
+            color: #94a3b8;
+            flex-wrap: wrap;
         }
 
         .active-match .btn-play {
-            display: inline-block; margin-top: 10px; padding: 8px 20px;
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 20px;
             background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: #1a1a2e; border: none; border-radius: 8px;
-            font-weight: 700; font-size: 13px; cursor: pointer;
-            text-decoration: none; font-family: inherit;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            font-family: inherit;
+            transition: transform 0.2s;
         }
 
-        .active-match .btn-play:hover { transform: scale(1.02); }
+        .active-match .btn-play:hover {
+            transform: scale(1.02);
+        }
 
-        .recent-list { display: flex; flex-direction: column; gap: 8px; }
+        .recent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
 
         .recent-item {
-            display: flex; justify-content: space-between; align-items: center;
-            background: #1a1a2e; padding: 12px 14px; border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1a1a2e;
+            padding: 12px 14px;
+            border-radius: 10px;
             border: 1px solid rgba(255,255,255,0.04);
         }
 
-        .recent-item .left .title { font-size: 13px; font-weight: 600; color: #f1f5f9; }
-        .recent-item .left .sub { font-size: 11px; color: #94a3b8; }
-        .recent-item .right { font-size: 13px; font-weight: 700; }
+        .recent-item .left .title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .recent-item .left .sub {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .recent-item .right {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
         .recent-item .right.positive { color: #10b981; }
         .recent-item .right.negative { color: #ef4444; }
         .recent-item .right.pending { color: #f59e0b; }
 
         .status-badge-sm {
-            font-size: 10px; padding: 2px 10px; border-radius: 12px; font-weight: 600;
+            font-size: 10px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: 600;
         }
 
         .status-badge-sm.won { background: rgba(16,185,129,0.15); color: #10b981; }
         .status-badge-sm.lost { background: rgba(239,68,68,0.15); color: #ef4444; }
         .status-badge-sm.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
 
-        @media (max-width: 480px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-
         #bottom-nav {
-            max-width: 480px; margin: 0 auto;
-            position: fixed; bottom: 0; left: 0; right: 0;
+            max-width: 480px;
+            margin: 0 auto;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
             background: rgba(10,14,26,0.95);
             backdrop-filter: blur(20px);
             border-top: 1px solid rgba(255,255,255,0.06);
-            display: flex; justify-content: space-around;
-            padding: 8px 4px 12px; z-index: 100;
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 4px 12px;
+            z-index: 100;
         }
 
         .nav-item {
-            display: flex; flex-direction: column; align-items: center;
-            gap: 2px; padding: 4px 12px; border: none; background: none;
-            color: #94a3b8; font-size: 10px; font-weight: 500;
-            cursor: pointer; transition: all 0.3s ease;
-            font-family: inherit; min-width: 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 4px 12px;
+            border: none;
+            background: none;
+            color: #94a3b8;
+            font-size: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            min-width: 48px;
             text-decoration: none;
         }
 
-        .nav-item svg { width: 24px; height: 24px; stroke: currentColor; }
+        .nav-item svg {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+        }
 
-        .nav-item.active { color: #06b6d4; }
+        .nav-item.active {
+            color: #06b6d4;
+        }
 
         .nav-item.active svg {
             stroke: #06b6d4;
             filter: drop-shadow(0 0 8px rgba(6,182,212,0.3));
         }
 
-        .nav-center { position: relative; }
-
-        .nav-center-btn {
-            width: 52px; height: 52px; border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            display: flex; align-items: center; justify-content: center;
-            margin-top: -24px; box-shadow: 0 4px 20px rgba(251,191,36,0.3);
-            transition: all 0.3s ease; cursor: pointer;
+        .empty-state {
+            text-align: center;
+            color: #94a3b8;
+            padding: 40px 20px;
+            font-size: 14px;
         }
 
-        .nav-center-btn:hover { transform: scale(1.08); box-shadow: 0 6px 30px rgba(251,191,36,0.4); }
-        .nav-center-btn svg { stroke: #1a1a2e; width: 28px; height: 28px; }
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
     </style>
 </head>
 <body>
     <div class="dashboard-wrapper">
 
+        <!-- Header -->
         <div class="dashboard-header">
             <div class="user-info">
-                <div class="avatar"><?php echo strtoupper(substr($user['username'], 0, 1)); ?></div>
+                <div class="avatar"><?php echo htmlspecialchars(strtoupper(substr($user['username'] ?? 'G', 0, 1))); ?></div>
                 <div>
-                    <div class="user-name"><?php echo htmlspecialchars($user['username']); ?></div>
-                    <div class="user-id">ID: #<?php echo $user['id']; ?></div>
+                    <div class="user-name"><?php echo htmlspecialchars($user['username'] ?? 'Player'); ?></div>
+                    <div class="user-id">ID: #<?php echo intval($user['id']); ?></div>
                 </div>
             </div>
-            <a href="index.php" class="logout-btn">🚪 Logout</a>
+            <a href="?logout=1" class="logout-btn">🚪 Logout</a>
         </div>
 
+        <!-- Wallet Card -->
         <div class="wallet-card">
             <div class="label">Available Balance</div>
-            <div class="balance">₹<?php echo number_format($user['wallet_balance'], 2); ?></div>
+            <div class="balance">₹<?php echo number_format($walletBalance, 2); ?></div>
             <div class="actions">
                 <a href="index.php#page-wallet" class="btn btn-primary">💰 Add Money</a>
                 <a href="index.php#page-wallet" class="btn btn-secondary">🏦 Withdraw</a>
             </div>
         </div>
 
+        <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat">
-                <div class="value blue"><?php echo $user['total_matches_played'] ?? 0; ?></div>
+                <div class="value blue"><?php echo $totalMatches; ?></div>
                 <div class="label">Matches</div>
             </div>
             <div class="stat">
-                <div class="value green"><?php echo $user['total_matches_won'] ?? 0; ?></div>
+                <div class="value green"><?php echo $totalWins; ?></div>
                 <div class="label">Wins</div>
             </div>
             <div class="stat">
-                <div class="value gold">₹<?php echo number_format($user['total_earnings'] ?? 0, 0); ?></div>
+                <div class="value gold">₹<?php echo number_format($totalEarnings, 0); ?></div>
                 <div class="label">Earnings</div>
             </div>
             <div class="stat">
-                <div class="value purple"><?php echo $user['elo_rating'] ?? 1200; ?></div>
+                <div class="value purple"><?php echo $eloRating; ?></div>
                 <div class="label">ELO</div>
             </div>
         </div>
 
-        <?php if ($activeMatch): ?>
+        <!-- Active Match Section -->
+        <?php if ($activeMatch && is_array($activeMatch) && !empty($activeMatch['id'])): ?>
         <div class="section">
             <div class="section-header"><h3>🎯 Active Match</h3></div>
             <div class="active-match">
-                <div class="room-code">🔑 Room: <?php echo htmlspecialchars($activeMatch['room_code']); ?></div>
+                <div class="room-code">🔑 Room: <?php echo htmlspecialchars($activeMatch['room_code'] ?? 'N/A'); ?></div>
                 <div class="details">
-                    <span>Entry: ₹<?php echo number_format($activeMatch['entry_fee'], 2); ?></span>
-                    <span>Prize: ₹<?php echo number_format($activeMatch['prize_pool'], 2); ?></span>
-                    <span>Status: <?php echo ucfirst($activeMatch['status']); ?></span>
+                    <span>Entry: ₹<?php echo number_format(floatval($activeMatch['entry_fee'] ?? 0), 2); ?></span>
+                    <span>Prize: ₹<?php echo number_format(floatval($activeMatch['prize_pool'] ?? 0), 2); ?></span>
+                    <span>Status: <?php echo htmlspecialchars(ucfirst($activeMatch['status'] ?? 'Unknown')); ?></span>
                 </div>
-                <a href="game.php?match_id=<?php echo $activeMatch['id']; ?>" class="btn-play">🎲 Play Now</a>
+                <a href="game.php?match_id=<?php echo intval($activeMatch['id']); ?>" class="btn-play">🎲 Play Now</a>
             </div>
         </div>
         <?php endif; ?>
 
+        <!-- Recent Matches Section -->
         <div class="section">
             <div class="section-header">
                 <h3>📋 Recent Matches</h3>
@@ -381,21 +592,32 @@ if ($basePath === '') {
             </div>
             <div class="recent-list">
                 <?php if (empty($recentMatches)): ?>
-                    <div style="color: #94a3b8; text-align: center; padding: 20px;">No matches played yet.</div>
+                    <div class="empty-state">📊 No matches played yet. Start playing now!</div>
                 <?php else: ?>
                     <?php foreach ($recentMatches as $match): ?>
                         <div class="recent-item">
                             <div class="left">
-                                <div class="title"><?php echo htmlspecialchars($match['player1_name']); ?> vs <?php echo htmlspecialchars($match['player2_name']); ?></div>
-                                <div class="sub">₹<?php echo number_format($match['entry_fee'], 2); ?> entry • <?php echo date('d M Y', strtotime($match['created_at'])); ?></div>
+                                <div class="title">
+                                    <?php 
+                                    $p1 = htmlspecialchars($match['player1_name'] ?? 'Unknown');
+                                    $p2 = htmlspecialchars($match['player2_name'] ?? 'Unknown');
+                                    echo "$p1 vs $p2";
+                                    ?>
+                                </div>
+                                <div class="sub">
+                                    ₹<?php echo number_format(floatval($match['entry_fee'] ?? 0), 2); ?> entry •
+                                    <?php echo date('d M Y', strtotime($match['created_at'] ?? 'now')); ?>
+                                </div>
                             </div>
                             <div class="right">
                                 <?php if ($match['status'] === 'completed'): ?>
-                                    <span class="status-badge-sm <?php echo $match['result']; ?>">
-                                        <?php echo $match['result'] === 'won' ? '🏆 Won' : 'Lost'; ?>
+                                    <span class="status-badge-sm <?php echo htmlspecialchars($match['result'] ?? 'lost'); ?>">
+                                        <?php echo ($match['result'] ?? 'lost') === 'won' ? '🏆 Won' : '❌ Lost'; ?>
                                     </span>
-                                    <?php if ($match['winning_amount'] > 0): ?>
-                                        <div style="font-size: 12px; color: #10b981;">+₹<?php echo number_format($match['winning_amount'], 2); ?></div>
+                                    <?php if (!empty($match['winning_amount']) && floatval($match['winning_amount']) > 0): ?>
+                                        <div style="font-size: 12px; color: #10b981; margin-top: 2px;">
+                                            +₹<?php echo number_format(floatval($match['winning_amount']), 2); ?>
+                                        </div>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <span class="status-badge-sm pending">⏳ Pending</span>
@@ -407,6 +629,7 @@ if ($basePath === '') {
             </div>
         </div>
 
+        <!-- Recent Transactions Section -->
         <div class="section">
             <div class="section-header">
                 <h3>💳 Recent Transactions</h3>
@@ -414,16 +637,16 @@ if ($basePath === '') {
             </div>
             <div class="recent-list">
                 <?php if (empty($recentTransactions)): ?>
-                    <div style="color: #94a3b8; text-align: center; padding: 20px;">No transactions yet.</div>
+                    <div class="empty-state">💰 No transactions yet.</div>
                 <?php else: ?>
                     <?php foreach ($recentTransactions as $tx): ?>
                         <div class="recent-item">
                             <div class="left">
-                                <div class="title"><?php echo htmlspecialchars($tx['description']); ?></div>
-                                <div class="sub"><?php echo date('d M Y, h:i A', strtotime($tx['created_at'])); ?></div>
+                                <div class="title"><?php echo htmlspecialchars($tx['description'] ?? 'Transaction'); ?></div>
+                                <div class="sub"><?php echo date('d M Y, h:i A', strtotime($tx['created_at'] ?? 'now')); ?></div>
                             </div>
-                            <div class="right <?php echo $tx['type'] === 'credit' ? 'positive' : 'negative'; ?>">
-                                <?php echo $tx['type'] === 'credit' ? '+' : '-'; ?>₹<?php echo number_format($tx['amount'], 2); ?>
+                            <div class="right <?php echo ($tx['type'] ?? 'debit') === 'credit' ? 'positive' : 'negative'; ?>">
+                                <?php echo ($tx['type'] ?? 'debit') === 'credit' ? '+' : '-'; ?>₹<?php echo number_format(floatval($tx['amount'] ?? 0), 2); ?>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -431,6 +654,7 @@ if ($basePath === '') {
             </div>
         </div>
 
+        <!-- Bottom Navigation -->
         <nav id="bottom-nav">
             <a href="dashboard.php" class="nav-item active">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -446,14 +670,12 @@ if ($basePath === '') {
                 </svg>
                 <span>Wallet</span>
             </a>
-            <a href="index.php#page-refer" class="nav-item nav-center">
-                <div class="nav-center-btn">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                </div>
+            <a href="index.php#page-refer" class="nav-item">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
                 <span>Refer</span>
             </a>
             <a href="index.php#page-history" class="nav-item">
@@ -473,5 +695,33 @@ if ($basePath === '') {
         </nav>
 
     </div>
+
+    <script>
+    // ✅ FIX: Logout handler
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout')) {
+            if (confirm('Are you sure you want to logout?')) {
+                fetch('<?php echo htmlspecialchars($basePath); ?>/api/auth.php?action=logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': '<?php echo htmlspecialchars($csrf_token); ?>'
+                    },
+                    credentials: 'include'
+                })
+                .then(() => {
+                    window.location.href = 'index.php';
+                })
+                .catch(err => {
+                    console.error('Logout error:', err);
+                    window.location.href = 'index.php';
+                });
+            } else {
+                window.history.back();
+            }
+        }
+    });
+    </script>
 </body>
 </html>
