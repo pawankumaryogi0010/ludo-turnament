@@ -382,7 +382,6 @@ class CSRFToken
 // ======================================================
 // UTILITY FUNCTIONS
 // ======================================================
-
 function sanitizeInput($data)
 {
     if (is_array($data)) {
@@ -424,20 +423,26 @@ function calculatePrizePool(float $entryFee, int $players): float
     return round($total - $fee, 2);
 }
 
-function jsonResponse(bool $success, string $message, array $data = [], int $statusCode = 200): void
-{
-    http_response_code($statusCode);
-    header('Content-Type: application/json; charset=utf-8');
-    header('X-Content-Type-Options: nosniff');
-    header('X-Frame-Options: DENY');
+/**
+ * JSON response helper
+ * Defensive: only declare if not already declared by another include
+ */
+if (!function_exists('jsonResponse')) {
+    function jsonResponse(bool $success, string $message, array $data = [], int $statusCode = 200): void
+    {
+        http_response_code($statusCode);
+        header('Content-Type: application/json; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
 
-    echo json_encode([
-        'success' => $success,
-        'message' => $message,
-        'data' => $data,
-        'timestamp' => time()
-    ], JSON_UNESCAPED_SLASHES);
-    exit;
+        echo json_encode([
+            'success' => $success,
+            'message' => $message,
+            'data' => $data,
+            'timestamp' => time()
+        ], JSON_UNESCAPED_SLASHES);
+        exit;
+    }
 }
 
 function isLoggedIn(): bool
