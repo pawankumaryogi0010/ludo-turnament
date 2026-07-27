@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * AUTH.PHP - Secure Authentication API (V2)
+ * AUTH.PHP - Secure Authentication API (V2 - FIXED)
  * Ludo Tournament Platform - Complete Auth
- * Version: 2.0.0 - ALL BUGS FIXED
+ * Version: 2.0.1 - DUPLICATE FUNCTION REMOVED
  * ======================================================
  */
 
@@ -111,19 +111,6 @@ function validateCsrfToken(string $token): bool
     }
     
     return hash_equals($_SESSION['csrf_token'], $token);
-}
-
-// ==============================================
-// ✅ FIX: Generate Referral Code
-// ==============================================
-function generateReferralCode(): string
-{
-    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    $code = '';
-    for ($i = 0; $i < 8; $i++) {
-        $code .= $chars[random_int(0, strlen($chars) - 1)];
-    }
-    return $code;
 }
 
 // ==============================================
@@ -304,6 +291,7 @@ function handleRegister(array $input): void
             }
         }
 
+        // ✅ FIX: Use generateReferralCode from db.php (avoid duplicate)
         $referCode = generateReferralCode();
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
