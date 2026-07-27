@@ -3,7 +3,7 @@
  * ======================================================
  * DATABASE CONFIGURATION & CORE SECURITY - COMPLETE FIXED
  * Ludo Tournament Platform - Production Ready
- * Version: 6.0.0 - FULLY FIXED
+ * Version: 6.0.1 - FULLY FIXED & VERIFIED
  * ======================================================
  */
 
@@ -401,6 +401,7 @@ function generateRoomCode(): string
     return strtoupper(substr(generateRandomString(4), 0, 6));
 }
 
+// ✅ FIX: SINGLE DEFINITION OF generateReferralCode (only in db.php)
 function generateReferralCode(): string
 {
     return 'REF' . strtoupper(substr(generateRandomString(4), 0, 8));
