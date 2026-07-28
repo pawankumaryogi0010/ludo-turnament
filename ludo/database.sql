@@ -1,7 +1,7 @@
 -- ======================================================
--- DATABASE SCHEMA - COMPLETE FIXED
+-- DATABASE SCHEMA - COMPLETE FIXED + financial_metrics
 -- Ludo Tournament Platform - Production Ready
--- Version: 4.0.0 - FIXED SCHEMA
+-- Version: 5.0.0 - ALL FIXES + NEW TABLE
 -- ======================================================
 
 -- ==============================================
@@ -97,13 +97,7 @@ CREATE TABLE IF NOT EXISTS `tournaments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 4. MATCHES TABLE
--- BUG FIX: Added individual token position columns (p1_token1..p4_token4,
--- p*_home_count) that game_state.php, match.php and game_sync.php reference.
--- Without these columns all game state reads/writes would fail with SQL errors.
--- Both the JSON board_state column AND the individual columns are kept so that
--- the polling endpoint (game_state.php) and the sync endpoint (game_sync.php)
--- both work correctly.
+-- 4. MATCHES TABLE (Fixed - token columns)
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `matches` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -131,9 +125,7 @@ CREATE TABLE IF NOT EXISTS `matches` (
     `tds_deducted` DECIMAL(10,2) DEFAULT NULL,
     `turn_number` INT(11) NOT NULL DEFAULT 0,
     `max_turns` INT(11) NOT NULL DEFAULT 50,
-    -- JSON board state (used by game.php / handleMoveToken)
     `board_state` JSON DEFAULT NULL,
-    -- Individual token columns (used by game_state.php polling + game_sync.php)
     `p1_token1` INT(11) NOT NULL DEFAULT -1,
     `p1_token2` INT(11) NOT NULL DEFAULT -1,
     `p1_token3` INT(11) NOT NULL DEFAULT -1,
@@ -421,7 +413,7 @@ CREATE TABLE IF NOT EXISTS `maintenance_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 16. ADMIN AUDIT LOG TABLE - NEW
+-- 16. ADMIN AUDIT LOG TABLE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `admin_audit_log` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -441,7 +433,45 @@ CREATE TABLE IF NOT EXISTS `admin_audit_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 17. DEFAULT SYSTEM SETTINGS
+-- 17. FINANCIAL METRICS TABLE (NEW - FIXED)
+-- ==============================================
+CREATE TABLE IF NOT EXISTS `financial_metrics` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT,
+    `metric_date` DATE NOT NULL,
+    `daily_deposits` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `daily_withdrawals` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `daily_platform_revenue` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `daily_matches_played` INT(11) NOT NULL DEFAULT 0,
+    `daily_new_users` INT(11) NOT NULL DEFAULT 0,
+    `total_platform_liability` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `total_user_balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `total_tds_deducted` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_metric_date` (`metric_date`),
+    KEY `idx_metric_date` (`metric_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- 18. WEBSOCKET SESSIONS TABLE
+-- ==============================================
+CREATE TABLE IF NOT EXISTS `websocket_sessions` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `socket_id` VARCHAR(255) NOT NULL,
+    `user_id` INT NOT NULL,
+    `match_id` INT,
+    `room_code` VARCHAR(10),
+    `is_active` BOOLEAN DEFAULT TRUE,
+    `connected_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `last_activity` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_socket_id` (`socket_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_room_code` (`room_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- 19. DEFAULT SYSTEM SETTINGS
 -- ==============================================
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES
 ('site_name', 'Ludo Tournament Pro', 'general', 'string', 'Website name', 1),
@@ -463,12 +493,7 @@ INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, 
 ('elo_k_factor', '32', 'gameplay', 'integer', 'ELO rating K-factor', 1);
 
 -- ==============================================
--- 18. ADMIN USER
--- BUG FIX: Previous hash '$2y$10$SOME_STRONG_HASH_FOR_ADMIN_2026_SECURE' was a
--- placeholder string, NOT a valid bcrypt hash — login would always fail with
--- password_verify(). Replaced with a real bcrypt hash for default password
--- "Admin@2026#Secure". Change this password immediately after first login!
--- Default password: Admin@2026#Secure
+-- 20. ADMIN USER (Default password: password)
 -- ==============================================
 INSERT INTO `users` (
     `username`, `mobile`, `email`, `password_hash`, `is_admin`, `is_verified`, `is_active`, `refer_code`, `created_at`
@@ -481,11 +506,9 @@ INSERT INTO `users` (
     'ADMIN001',
     CURRENT_TIMESTAMP
 ) ON DUPLICATE KEY UPDATE is_admin = 1;
--- NOTE: The hash above corresponds to "password" (bcrypt cost 10) for initial setup.
--- Run this PHP to generate your own: echo password_hash('YourPassword', PASSWORD_DEFAULT);
 
 -- ==============================================
--- 19. INDEXES FOR PERFORMANCE
+-- 21. INDEXES FOR PERFORMANCE
 -- ==============================================
 CREATE INDEX IF NOT EXISTS idx_matches_status_created ON matches(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_status ON transactions(user_id, status);
@@ -494,7 +517,7 @@ CREATE INDEX IF NOT EXISTS idx_kyc_status_created ON kyc_documents(status, creat
 CREATE INDEX IF NOT EXISTS idx_disputes_status_created ON dispute_tickets(status, created_at DESC);
 
 -- ==============================================
--- 20. CLEANUP PROCEDURE
+-- 22. CLEANUP PROCEDURES
 -- ==============================================
 DELIMITER $$
 
@@ -505,8 +528,6 @@ END$$
 
 CREATE PROCEDURE archive_old_game_actions()
 BEGIN
-    -- BUG FIX: game_actions_archive table did not exist in the schema, causing
-    -- the procedure to error on every call. Create it first if missing, then archive.
     CREATE TABLE IF NOT EXISTS game_actions_archive LIKE game_actions;
     INSERT INTO game_actions_archive
         SELECT * FROM game_actions
