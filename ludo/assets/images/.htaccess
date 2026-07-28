@@ -1,0 +1,12 @@
+# Allow SVG, PNG, JPG, WebP images
+<FilesMatch "\.(svg|png|jpg|jpeg|webp|gif|ico)$">
+    Header set Cache-Control "max-age=2592000, public"
+</FilesMatch>
+
+# Enable CORS for images
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
