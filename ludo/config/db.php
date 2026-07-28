@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * DATABASE CONFIGURATION & CORE SECURITY - COMPLETE FIXED
+ * DATABASE CONFIGURATION & CORE SECURITY - COMPLETELY FIXED
  * Ludo Tournament Platform - Production Ready
- * Version: 6.0.1 - FULLY FIXED & VERIFIED
+ * Version: 6.0.1 - ALL FIXES APPLIED
  * ======================================================
  */
 
@@ -12,7 +12,6 @@ declare(strict_types=1);
 // ======================================================
 // ENVIRONMENT CONFIGURATION
 // ======================================================
-// BUG FIX: .env lives in ludo/ (parent of config/), not in ludo/config/
 $envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
     $env = parse_ini_file($envFile);
@@ -41,8 +40,7 @@ define('PLATFORM_FEE', (float)($env['PLATFORM_FEE'] ?? 15));
 define('TDS_RATE', (float)($env['TDS_RATE'] ?? 30));
 define('TDS_THRESHOLD', (float)($env['TDS_THRESHOLD'] ?? 10000));
 
-// BUG FIX: Cashfree constants defined here so all files can use them
-// cashfree.php was trying $_ENV which doesn't contain parse_ini_file values
+// Cashfree constants
 define('CASHFREE_APP_ID_CFG', $env['CASHFREE_APP_ID'] ?? '');
 define('CASHFREE_SECRET_KEY_CFG', $env['CASHFREE_SECRET_KEY'] ?? '');
 define('CASHFREE_ENV_CFG', $env['CASHFREE_ENV'] ?? 'test');
@@ -407,7 +405,6 @@ function generateRoomCode(): string
     return strtoupper(substr(generateRandomString(4), 0, 6));
 }
 
-// ✅ FIX: SINGLE DEFINITION OF generateReferralCode (only in db.php)
 function generateReferralCode(): string
 {
     return 'REF' . strtoupper(substr(generateRandomString(4), 0, 8));
@@ -431,12 +428,16 @@ function calculatePrizePool(float $entryFee, int $players): float
 }
 
 /**
- * JSON response helper
- * Defensive: only declare if not already declared by another include
+ * JSON response helper - SINGLE DEFINITION
  */
 if (!function_exists('jsonResponse')) {
     function jsonResponse(bool $success, string $message, array $data = [], int $statusCode = 200): void
     {
+        // Release session lock before sending response (prevents blocking)
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        
         http_response_code($statusCode);
         header('Content-Type: application/json; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
@@ -454,12 +455,24 @@ if (!function_exists('jsonResponse')) {
 
 function isLoggedIn(): bool
 {
-    return SessionManager::has('user_id') && !empty(SessionManager::get('user_id'));
+    // FIX: Also check session directly (more reliable than SessionManager alone)
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    $hasSession = SessionManager::has('user_id') && !empty(SessionManager::get('user_id'));
+    $hasDirectSession = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+    
+    return $hasSession || $hasDirectSession;
 }
 
 function getCurrentUserId(): ?int
 {
+    // FIX: Check both SessionManager and direct $_SESSION
     $userId = SessionManager::get('user_id');
+    if ($userId === null || $userId === '') {
+        $userId = $_SESSION['user_id'] ?? null;
+    }
     if ($userId === null || $userId === '') {
         return null;
     }
@@ -469,12 +482,17 @@ function getCurrentUserId(): ?int
 function isAdminLoggedIn(): bool
 {
     if (!SessionManager::has('admin_id') || !SessionManager::has('admin_token')) {
-        return false;
+        if (!isset($_SESSION['admin_id']) || !isset($_SESSION['admin_token'])) {
+            return false;
+        }
     }
 
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
+
+        $adminId = SessionManager::get('admin_id') ?? $_SESSION['admin_id'] ?? null;
+        $adminToken = SessionManager::get('admin_token') ?? $_SESSION['admin_token'] ?? null;
 
         $stmt = $conn->prepare("
             SELECT s.id
@@ -485,8 +503,8 @@ function isAdminLoggedIn(): bool
             AND s.expires_at > NOW()
         ");
         $stmt->execute([
-            ':admin_id' => SessionManager::get('admin_id'),
-            ':token' => SessionManager::get('admin_token')
+            ':admin_id' => $adminId,
+            ':token' => $adminToken
         ]);
 
         return $stmt->fetch() !== false;
@@ -499,8 +517,4 @@ function isAdminLoggedIn(): bool
 // INITIALIZE SESSION
 // ======================================================
 SessionManager::init();
-
-// ======================================================
-// END OF CONFIGURATION FILE
-// ======================================================
 ?>
