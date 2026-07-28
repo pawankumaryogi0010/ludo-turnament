@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * GAME_SYNC.PHP - Game State Sync Endpoint (FIXED)
- * Ludo Tournament Platform - Save Game State
- * Version: 2.0.0 - STATUS VALIDATION + TURN VALIDATION FIX
+ * GAME_SYNC.PHP - Game State Sync Endpoint (FINAL FIXED)
+ * Ludo Tournament Platform - Save/Load Game State
+ * Version: 2.0.0 - AUTH CHECK + ALL BUGS FIXED
  * ======================================================
  */
 
@@ -26,19 +26,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// AUTHENTICATION REQUIRED FOR ALL ACTIONS
 if (!isLoggedIn()) {
     jsonResponse(false, 'Not authenticated', [], 401);
 }
 
 $userId = getCurrentUserId();
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
+if (!$userId) {
+    jsonResponse(false, 'Invalid session', [], 401);
+}
+
+$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
 
 switch ($action) {
     case 'save_state':
-        handleSaveState();
+        handleSaveState($userId);
         break;
     case 'get_state':
-        handleGetState();
+        handleGetState($userId);
         break;
     default:
         jsonResponse(false, 'Invalid action', [], 400);
@@ -47,9 +52,8 @@ switch ($action) {
 // ==============================================
 // SAVE GAME STATE
 // ==============================================
-function handleSaveState() {
-    global $userId;
-    
+function handleSaveState(int $userId): void
+{
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input || !isset($input['match_id'])) {
         jsonResponse(false, 'Missing match ID', [], 400);
@@ -68,10 +72,12 @@ function handleSaveState() {
         
         $db->beginTransaction();
         
-        // FIXED: Fetch full match row for validation
+        // Verify user is in this match
         $stmt = $conn->prepare("
-            SELECT id, player1_id, player2_id, status FROM matches
-            WHERE id = :mid AND (player1_id = :uid OR player2_id = :uid)
+            SELECT id, player1_id, player2_id, status 
+            FROM matches
+            WHERE id = :mid 
+            AND (player1_id = :uid OR player2_id = :uid)
             FOR UPDATE
         ");
         $stmt->execute([':mid' => $matchId, ':uid' => $userId]);
@@ -87,10 +93,12 @@ function handleSaveState() {
         $requestedStatus = $input['status'] ?? 'playing';
         $safeStatus = in_array($requestedStatus, $allowedStatuses, true) ? $requestedStatus : 'playing';
 
-        // FIXED: Validate current_turn belongs to the match
-        $validTurns = [intval($match['player1_id'] ?? 0), intval($match['player2_id'] ?? 0)];
+        // FIXED: Validate current_turn belongs to this match
+        $player1Id = intval($match['player1_id'] ?? 0);
+        $player2Id = intval($match['player2_id'] ?? 0);
+        $validTurns = [$player1Id, $player2Id];
         $requestedTurn = intval($input['current_turn'] ?? 0);
-        $safeTurn = in_array($requestedTurn, $validTurns, true) ? $requestedTurn : ($validTurns[0] ?? 0);
+        $safeTurn = in_array($requestedTurn, $validTurns, true) ? $requestedTurn : $player1Id;
 
         // Update match with game state
         $stmt = $conn->prepare("
@@ -141,11 +149,10 @@ function handleSaveState() {
 }
 
 // ==============================================
-// GET GAME STATE
+// GET GAME STATE (FIXED: Added authorization)
 // ==============================================
-function handleGetState() {
-    global $userId;
-    
+function handleGetState(int $userId): void
+{
     $matchId = isset($_GET['match_id']) ? intval($_GET['match_id']) : 0;
     
     if ($matchId <= 0) {
@@ -156,9 +163,11 @@ function handleGetState() {
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
+        // FIXED: Verify user is in this match before returning state
         $stmt = $conn->prepare("
             SELECT 
                 id, room_code, status, current_turn_id, dice_value, turn_number,
+                player1_id, player2_id,
                 p1_token1, p1_token2, p1_token3, p1_token4, p1_home_count,
                 p2_token1, p2_token2, p2_token3, p2_token4, p2_home_count
             FROM matches
@@ -169,6 +178,14 @@ function handleGetState() {
         
         if (!$match) {
             jsonResponse(false, 'Match not found', [], 404);
+        }
+        
+        // FIXED: Authorization check - user must be in this match
+        $player1Id = intval($match['player1_id'] ?? 0);
+        $player2Id = intval($match['player2_id'] ?? 0);
+        
+        if ($userId !== $player1Id && $userId !== $player2Id) {
+            jsonResponse(false, 'Not authorized to view this match', [], 403);
         }
         
         jsonResponse(true, 'Game state retrieved', [
