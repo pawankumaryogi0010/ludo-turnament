@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * INVITE.PHP - Friend Invite API
+ * INVITE.PHP - Friend Invite API (FIXED)
  * Ludo Tournament Platform - Complete Invite System
- * Version: 2.0.0 - COMPLETE
+ * Version: 3.0.0 - ALL FIXES APPLIED
  * ======================================================
  */
 
@@ -16,7 +16,6 @@ require_once dirname(__DIR__) . '/config/db.php';
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
-
 header('Access-Control-Allow-Origin: ' . BASE_URL);
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, X-CSRF-Token');
@@ -36,146 +35,107 @@ if (!$userId) {
     jsonResponse(false, 'Invalid session', [], 401);
 }
 
-$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
-    case 'create':
-        handleCreateInvite();
-        break;
-    case 'check_room':
-        handleCheckRoom();
-        break;
-    case 'join':
-        handleJoinRoom();
-        break;
-    case 'get_room':
-        handleGetRoom();
-        break;
-    default:
-        jsonResponse(false, 'Invalid action specified', [], 400);
-        break;
+    case 'create': handleCreateInvite(); break;
+    case 'check_room': handleCheckRoom(); break;
+    case 'join': handleJoinRoom(); break;
+    case 'get_room': handleGetRoom(); break;
+    default: jsonResponse(false, 'Invalid action', [], 400);
 }
 
+// ==============================================
+// CREATE INVITE
+// ==============================================
 function handleCreateInvite() {
     global $userId;
     
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        $input = $_POST;
+    $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+    
+    $roomCode = trim($input['room_code'] ?? '');
+    
+    if (!CSRFToken::validate($input['csrf_token'] ?? '')) {
+        jsonResponse(false, 'Invalid CSRF', [], 403);
     }
     
-    $roomCode = isset($input['room_code']) ? trim($input['room_code']) : '';
-    $matchId = isset($input['match_id']) ? intval($input['match_id']) : 0;
-    
-    $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!CSRFToken::validate($csrfToken)) {
-        jsonResponse(false, 'Invalid CSRF token', [], 403);
-    }
-    
-    if (empty($roomCode)) {
-        jsonResponse(false, 'Room code required', [], 400);
-    }
+    if (empty($roomCode)) { jsonResponse(false, 'Room code required', [], 400); }
     
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
-        $stmt = $conn->prepare("
-            SELECT id, room_code, status, player1_id, player2_id, entry_fee, prize_pool
-            FROM matches 
-            WHERE room_code = :room_code
-        ");
-        $stmt->execute([':room_code' => $roomCode]);
+        $stmt = $conn->prepare("SELECT id, room_code, status, player1_id, player2_id, entry_fee, prize_pool FROM matches WHERE room_code = :rc");
+        $stmt->execute([':rc' => $roomCode]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$match) {
-            jsonResponse(false, 'Room not found', [], 404);
-        }
+        if (!$match) { jsonResponse(false, 'Room not found', [], 404); }
         
         $inviteCode = 'INV-' . strtoupper(uniqid() . bin2hex(random_bytes(3)));
         
-        jsonResponse(true, 'Invite created successfully', [
-            'room_code' => $roomCode,
-            'match_id' => $match['id'],
+        jsonResponse(true, 'Invite created', [
+            'room_code' => $roomCode, 'match_id' => $match['id'],
             'invite_code' => $inviteCode,
             'invite_url' => BASE_URL . '/join.php?room=' . $roomCode,
             'status' => $match['status'],
             'player_count' => ($match['player1_id'] ? 1 : 0) + ($match['player2_id'] ? 1 : 0)
         ]);
-        
     } catch (PDOException $e) {
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
-    } catch (Exception $e) {
-        jsonResponse(false, 'Error: ' . $e->getMessage(), [], 500);
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
+// ==============================================
+// CHECK ROOM
+// ==============================================
 function handleCheckRoom() {
-    $roomCode = isset($_GET['room']) ? trim($_GET['room']) : '';
+    $roomCode = trim($_GET['room'] ?? '');
     
-    if (empty($roomCode)) {
-        jsonResponse(false, 'Room code required', [], 400);
-    }
+    if (empty($roomCode)) { jsonResponse(false, 'Room code required', [], 400); }
     
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
-        $stmt = $conn->prepare("
-            SELECT 
-                id, room_code, status, player1_id, player2_id,
-                player1_name, player2_name, entry_fee, prize_pool, created_at
-            FROM matches 
-            WHERE room_code = :room_code
-        ");
-        $stmt->execute([':room_code' => $roomCode]);
+        $stmt = $conn->prepare("SELECT id, room_code, status, player1_id, player2_id, player1_name, player2_name, entry_fee, prize_pool, created_at FROM matches WHERE room_code = :rc");
+        $stmt->execute([':rc' => $roomCode]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$match) {
-            jsonResponse(false, 'Room not found', [], 404);
-        }
+        if (!$match) { jsonResponse(false, 'Room not found', [], 404); }
         
         $isFull = ($match['player1_id'] && $match['player2_id']);
         $playerCount = ($match['player1_id'] ? 1 : 0) + ($match['player2_id'] ? 1 : 0);
         
         jsonResponse(true, 'Room found', [
             'room' => [
-                'id' => $match['id'],
-                'room_code' => $match['room_code'],
-                'status' => $match['status'],
-                'player1_name' => $match['player1_name'],
+                'id' => $match['id'], 'room_code' => $match['room_code'],
+                'status' => $match['status'], 'player1_name' => $match['player1_name'],
                 'player2_name' => $match['player2_name'],
                 'entry_fee' => floatval($match['entry_fee']),
                 'prize_pool' => floatval($match['prize_pool']),
-                'player_count' => $playerCount,
-                'is_full' => $isFull,
+                'player_count' => $playerCount, 'is_full' => $isFull,
                 'created_at' => $match['created_at']
             ]
         ]);
-        
     } catch (PDOException $e) {
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
+// ==============================================
+// JOIN ROOM
+// ==============================================
 function handleJoinRoom() {
     global $userId;
     
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        $input = $_POST;
+    $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+    $roomCode = trim($input['room_code'] ?? '');
+    
+    if (!CSRFToken::validate($input['csrf_token'] ?? '')) {
+        jsonResponse(false, 'Invalid CSRF', [], 403);
     }
     
-    $roomCode = isset($input['room_code']) ? trim($input['room_code']) : '';
-    
-    $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!CSRFToken::validate($csrfToken)) {
-        jsonResponse(false, 'Invalid CSRF token', [], 403);
-    }
-    
-    if (empty($roomCode)) {
-        jsonResponse(false, 'Room code required', [], 400);
-    }
+    if (empty($roomCode)) { jsonResponse(false, 'Room code required', [], 400); }
     
     try {
         $db = Database::getInstance();
@@ -183,21 +143,13 @@ function handleJoinRoom() {
         
         $db->beginTransaction();
         
-        $stmt = $conn->prepare("
-            SELECT id, room_code, status, player1_id, player2_id, entry_fee, prize_pool
-            FROM matches 
-            WHERE room_code = :room_code
-            FOR UPDATE
-        ");
-        $stmt->execute([':room_code' => $roomCode]);
+        $stmt = $conn->prepare("SELECT id, room_code, status, player1_id, player2_id, entry_fee, prize_pool FROM matches WHERE room_code = :rc FOR UPDATE");
+        $stmt->execute([':rc' => $roomCode]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$match) {
-            $db->rollback();
-            jsonResponse(false, 'Room not found', [], 404);
-        }
+        if (!$match) { $db->rollback(); jsonResponse(false, 'Room not found', [], 404); }
         
-        if ($match['status'] === 'playing' || $match['status'] === 'completed') {
+        if (in_array($match['status'], ['playing', 'completed'])) {
             $db->rollback();
             jsonResponse(false, 'Game already started or completed', [], 400);
         }
@@ -212,124 +164,75 @@ function handleJoinRoom() {
             jsonResponse(false, 'You are already in this room', [], 409);
         }
         
-        $stmt = $conn->prepare("
-            SELECT id, username, wallet_balance 
-            FROM users 
-            WHERE id = :user_id
-        ");
-        $stmt->execute([':user_id' => $userId]);
+        // Fetch user
+        $stmt = $conn->prepare("SELECT id, username, wallet_balance FROM users WHERE id = :uid");
+        $stmt->execute([':uid' => $userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$user) {
+        if (!$user) { $db->rollback(); jsonResponse(false, 'User not found', [], 404); }
+        
+        $entryFee = floatval($match['entry_fee']);
+        if ($user['wallet_balance'] < $entryFee) {
             $db->rollback();
-            jsonResponse(false, 'User not found', [], 404);
+            jsonResponse(false, 'Insufficient balance', [], 400);
         }
         
-        if ($user['wallet_balance'] < $match['entry_fee']) {
-            $db->rollback();
-            jsonResponse(false, 'Insufficient balance to join', [], 400);
-        }
+        // Deduct balance
+        $newBalance = $user['wallet_balance'] - $entryFee;
+        $stmt = $conn->prepare("UPDATE users SET wallet_balance = wallet_balance - :amt WHERE id = :uid");
+        $stmt->execute([':amt' => $entryFee, ':uid' => $userId]);
         
-        $newBalance = $user['wallet_balance'] - $match['entry_fee'];
-        $stmt = $conn->prepare("
-            UPDATE users 
-            SET wallet_balance = wallet_balance - :amount 
-            WHERE id = :user_id
-        ");
-        $stmt->execute([
-            ':amount' => $match['entry_fee'],
-            ':user_id' => $userId
-        ]);
+        // Determine first turn
+        $player1Id = intval($match['player1_id']);
+        $firstTurn = rand(0, 1) === 0 ? $player1Id : $userId;
         
-        $stmt = $conn->prepare("
-            UPDATE matches 
-            SET 
-                player2_id = :user_id,
-                player2_name = :username,
-                status = 'ready',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :match_id
-        ");
-        $stmt->execute([
-            ':user_id' => $userId,
-            ':username' => $user['username'],
-            ':match_id' => $match['id']
-        ]);
+        // Update match
+        $stmt = $conn->prepare("UPDATE matches SET player2_id = :p2id, player2_name = :p2name, status = 'ready', current_turn_id = :turn, updated_at = CURRENT_TIMESTAMP WHERE id = :mid");
+        $stmt->execute([':p2id' => $userId, ':p2name' => $user['username'], ':turn' => $firstTurn, ':mid' => $match['id']]);
         
+        // Record transaction
         $orderId = 'JOIN-' . strtoupper(uniqid() . bin2hex(random_bytes(4)));
         $stmt = $conn->prepare("
-            INSERT INTO transactions (
-                user_id, match_id, amount, type, source, description,
-                order_id, status, balance_before, balance_after, created_at
-            ) VALUES (
-                :user_id, :match_id, :amount, 'debit', 'match_fee', :description,
-                :order_id, 'success', :balance_before, :balance_after, CURRENT_TIMESTAMP
-            )
+            INSERT INTO transactions (user_id, match_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at)
+            VALUES (:uid, :mid, :amt, 'debit', 'match_fee', :desc, :oid, 'success', :bb, :ba, CURRENT_TIMESTAMP)
         ");
-        $stmt->execute([
-            ':user_id' => $userId,
-            ':match_id' => $match['id'],
-            ':amount' => $match['entry_fee'],
-            ':description' => "Joined via invite link",
-            ':order_id' => $orderId,
-            ':balance_before' => $user['wallet_balance'],
-            ':balance_after' => $newBalance
-        ]);
+        $stmt->execute([':uid' => $userId, ':mid' => $match['id'], ':amt' => $entryFee, ':desc' => "Joined via invite", ':oid' => $orderId, ':bb' => $user['wallet_balance'], ':ba' => $newBalance]);
         
         $db->commit();
         
         jsonResponse(true, 'Successfully joined room!', [
-            'match_id' => $match['id'],
-            'room_code' => $match['room_code'],
-            'player1_name' => $match['player1_name'],
-            'player2_name' => $user['username'],
-            'entry_fee' => floatval($match['entry_fee']),
-            'prize_pool' => floatval($match['prize_pool']),
+            'match_id' => $match['id'], 'room_code' => $match['room_code'],
+            'player1_name' => $match['player1_name'], 'player2_name' => $user['username'],
+            'entry_fee' => $entryFee, 'prize_pool' => floatval($match['prize_pool']),
             'redirect_url' => BASE_URL . '/game.php?match_id=' . $match['id']
         ]);
-        
     } catch (PDOException $e) {
-        if (isset($db) && $db->inTransaction()) {
-            $db->rollback();
-        }
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
-    } catch (Exception $e) {
-        if (isset($db) && $db->inTransaction()) {
-            $db->rollback();
-        }
-        jsonResponse(false, 'Error: ' . $e->getMessage(), [], 500);
+        if (isset($db) && $db->inTransaction()) $db->rollback();
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
+// ==============================================
+// GET ROOM
+// ==============================================
 function handleGetRoom() {
-    $roomCode = isset($_GET['room_code']) ? trim($_GET['room_code']) : '';
+    $roomCode = trim($_GET['room_code'] ?? '');
     
-    if (empty($roomCode)) {
-        jsonResponse(false, 'Room code required', [], 400);
-    }
+    if (empty($roomCode)) { jsonResponse(false, 'Room code required', [], 400); }
     
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
-        $stmt = $conn->prepare("
-            SELECT id, room_code, entry_fee, prize_pool, status,
-                   player1_id, player2_id, player1_name, player2_name, created_at
-            FROM matches 
-            WHERE room_code = :room_code
-        ");
-        $stmt->execute([':room_code' => $roomCode]);
+        $stmt = $conn->prepare("SELECT id, room_code, entry_fee, prize_pool, status, player1_id, player2_id, player1_name, player2_name, created_at FROM matches WHERE room_code = :rc");
+        $stmt->execute([':rc' => $roomCode]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$match) {
-            jsonResponse(false, 'Room not found', [], 404);
-        }
+        if (!$match) { jsonResponse(false, 'Room not found', [], 404); }
         
-        jsonResponse(true, 'Room details retrieved', [
-            'room' => $match
-        ]);
-        
+        jsonResponse(true, 'Room details', ['room' => $match]);
     } catch (PDOException $e) {
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
+?>
