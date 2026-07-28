@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * INDEX.PHP - MAIN ENTRY POINT
+ * INDEX.PHP - MAIN ENTRY POINT (ZUPPEE LUDO UI CLONE)
  * Ludo Tournament Platform - Complete SPA
- * Version: 9.0.0 - COMPLETE REWRITE WITH ALL FIXES
+ * Version: 10.0.0 - ZUPPEE UI + ALL FIXES + 4 BANNERS
  * ======================================================
  */
 
@@ -20,7 +20,7 @@ if (isLoggedIn()) {
     exit;
 }
 
-// ✅ FIX: Generate CSRF token with proper session initialization
+// Generate CSRF token
 if (!isset($_SESSION['csrf_token']) || empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     $_SESSION['csrf_token_time'] = time();
@@ -38,989 +38,828 @@ if ($basePath === '') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0a0e1a">
+    <meta name="theme-color" content="#5B2D8E">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Ludo Tournament Pro - Skill-Based Gaming</title>
+    <title>Ludo Pro - Play & Win Real Cash</title>
 
+    <!-- Google Fonts - Poppins (Zupee uses Poppins) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/style.css">
+    <!-- Zupee Ludo UI CSS -->
+    <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/zupee-style.css">
     <link rel="manifest" href="<?php echo $basePath; ?>/manifest.json">
 
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fbbf24'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%235B2D8E'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/%3E%3C/svg%3E">
 </head>
 <body>
+    <!-- ==============================================
+    MAIN APP WRAPPER
+    ============================================== -->
     <div id="app-wrapper">
-        <div id="app-container">
+        
+        <!-- HEADER -->
+        <header class="zupee-header">
+            <div class="header-left">
+                <div class="logo-icon">🎲</div>
+                <div class="logo-text">
+                    <span class="logo-title">Ludo Pro</span>
+                    <span class="logo-subtitle">Skill Gaming</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn-wallet-badge" id="headerWalletBtn">
+                    <span class="wallet-icon">💰</span>
+                    <span class="wallet-amount" id="headerBalance">₹0</span>
+                    <span class="add-icon">+</span>
+                </button>
+                <button class="btn-login-sm" id="headerLoginBtn">Login</button>
+            </div>
+        </header>
 
-            <header id="app-header">
-                <div class="header-left">
-                    <div class="user-avatar" id="userAvatar">
-                        <span class="avatar-text">G</span>
-                        <span class="online-dot"></span>
-                    </div>
-                    <div class="user-info">
-                        <span class="user-greeting">Welcome,</span>
-                        <span class="user-name" id="displayUsername">Guest</span>
+        <!-- ==============================================
+        BANNER CAROUSEL (4 BANNERS)
+        ============================================== -->
+        <div class="banner-carousel" id="bannerCarousel">
+            <div class="banner-track" id="bannerTrack">
+                <!-- Banner 1: Welcome Bonus -->
+                <div class="banner-slide">
+                    <div class="banner-card banner-1">
+                        <div class="banner-content">
+                            <h2 class="banner-title">🎉 ₹100 Welcome Bonus</h2>
+                            <p class="banner-desc">Sign up & get instant bonus!</p>
+                            <button class="banner-btn" onclick="openAuthModal('register')">Claim Now →</button>
+                        </div>
+                        <div class="banner-image">
+                            <img src="<?php echo $basePath; ?>/assets/images/banner-welcome.png" alt="Welcome Bonus" onerror="this.style.display='none'">
+                        </div>
                     </div>
                 </div>
-                <div class="header-right">
-                    <div class="wallet-box" id="walletBox">
-                        <span class="wallet-label">Wallet</span>
-                        <span class="wallet-balance" id="walletBalance">₹0.00</span>
-                        <button class="wallet-add-btn" id="walletAddBtn" aria-label="Add Money">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="12" y1="5" x2="12" y2="19"/>
-                                <line x1="5" y1="12" x2="19" y2="12"/>
-                            </svg>
-                        </button>
+                
+                <!-- Banner 2: Referral -->
+                <div class="banner-slide">
+                    <div class="banner-card banner-2">
+                        <div class="banner-content">
+                            <h2 class="banner-title">👥 Refer & Earn ₹50</h2>
+                            <p class="banner-desc">Per friend who joins & plays!</p>
+                            <button class="banner-btn" onclick="navigateTo('refer')">Invite Friends →</button>
+                        </div>
+                        <div class="banner-image">
+                            <img src="<?php echo $basePath; ?>/assets/images/banner-refer.png" alt="Refer & Earn" onerror="this.style.display='none'">
+                        </div>
                     </div>
                 </div>
-            </header>
-
-            <main id="app-main">
-
-                <section id="page-dashboard" class="page active">
-                    <div class="page-content">
-                        <div class="hero-banner">
-                            <div class="hero-content">
-                                <h1 class="hero-title">Play & Win <span class="highlight">Real</span> Rewards</h1>
-                                <p class="hero-subtitle">Skill-based Ludo tournaments. 100% legal.</p>
-                            </div>
-                            <div class="hero-badge">
-                                <span class="badge-pulse">⚡</span>
-                                <span id="onlineCount">1,247 Online</span>
-                            </div>
+                
+                <!-- Banner 3: Tournament -->
+                <div class="banner-slide">
+                    <div class="banner-card banner-3">
+                        <div class="banner-content">
+                            <h2 class="banner-title">🏆 Mega Tournament</h2>
+                            <p class="banner-desc">Win up to ₹10,000 daily!</p>
+                            <button class="banner-btn" onclick="openAuthModal('login')">Play Now →</button>
                         </div>
-
-                        <div class="quick-stats">
-                            <div class="stat-item">
-                                <span class="stat-value" id="todayWinnings">₹2.4K</span>
-                                <span class="stat-label">Today's Winnings</span>
-                            </div>
-                            <div class="stat-divider"></div>
-                            <div class="stat-item">
-                                <span class="stat-value" id="activePlayers">847</span>
-                                <span class="stat-label">Active Players</span>
-                            </div>
-                            <div class="stat-divider"></div>
-                            <div class="stat-item">
-                                <span class="stat-value">4.8★</span>
-                                <span class="stat-label">Rating</span>
-                            </div>
-                        </div>
-
-                        <div class="section-header">
-                            <h2 class="section-title">Tournament Tickets</h2>
-                            <button class="section-view-all" id="viewAllTournaments">View All</button>
-                        </div>
-
-                        <div class="tournament-grid" id="tournamentGrid">
-                            <div class="tournament-card" data-entry="10" data-win="17" data-tournament-id="1">
-                                <div class="card-glow"></div>
-                                <div class="card-header">
-                                    <span class="card-badge">POPULAR</span>
-                                    <span class="card-level">Beginner</span>
-                                </div>
-                                <div class="card-body">
-                                    <div class="card-prize">
-                                        <span class="prize-amount">₹17</span>
-                                        <span class="prize-label">Prize Pool</span>
-                                    </div>
-                                    <div class="card-entry">
-                                        <span class="entry-amount">₹10</span>
-                                        <span class="entry-label">Entry Fee</span>
-                                    </div>
-                                    <div class="card-players">
-                                        <div class="player-avatars">
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini empty">+</span>
-                                        </div>
-                                        <span class="players-count">2/4 Players</span>
-                                    </div>
-                                </div>
-                                <button class="card-join-btn" data-entry="10" data-tournament-id="1">
-                                    Join Now <span class="btn-arrow">→</span>
-                                </button>
-                            </div>
-
-                            <div class="tournament-card featured" data-entry="20" data-win="34" data-tournament-id="2">
-                                <div class="card-glow"></div>
-                                <div class="card-header">
-                                    <span class="card-badge featured-badge">🔥 HOT</span>
-                                    <span class="card-level">Intermediate</span>
-                                </div>
-                                <div class="card-body">
-                                    <div class="card-prize">
-                                        <span class="prize-amount">₹34</span>
-                                        <span class="prize-label">Prize Pool</span>
-                                    </div>
-                                    <div class="card-entry">
-                                        <span class="entry-amount">₹20</span>
-                                        <span class="entry-label">Entry Fee</span>
-                                    </div>
-                                    <div class="card-players">
-                                        <div class="player-avatars">
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                        </div>
-                                        <span class="players-count">4/4 Players</span>
-                                    </div>
-                                </div>
-                                <button class="card-join-btn" data-entry="20" data-tournament-id="2">
-                                    Join Now <span class="btn-arrow">→</span>
-                                </button>
-                            </div>
-
-                            <div class="tournament-card" data-entry="50" data-win="85" data-tournament-id="3">
-                                <div class="card-glow"></div>
-                                <div class="card-header">
-                                    <span class="card-badge">PREMIUM</span>
-                                    <span class="card-level">Advanced</span>
-                                </div>
-                                <div class="card-body">
-                                    <div class="card-prize">
-                                        <span class="prize-amount">₹85</span>
-                                        <span class="prize-label">Prize Pool</span>
-                                    </div>
-                                    <div class="card-entry">
-                                        <span class="entry-amount">₹50</span>
-                                        <span class="entry-label">Entry Fee</span>
-                                    </div>
-                                    <div class="card-players">
-                                        <div class="player-avatars">
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini"></span>
-                                            <span class="avatar-mini empty">+</span>
-                                            <span class="avatar-mini empty">+</span>
-                                        </div>
-                                        <span class="players-count">1/4 Players</span>
-                                    </div>
-                                </div>
-                                <button class="card-join-btn" data-entry="50" data-tournament-id="3">
-                                    Join Now <span class="btn-arrow">→</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="referral-section">
-                            <div class="referral-content">
-                                <div class="referral-icon">🎁</div>
-                                <div class="referral-text">
-                                    <h3>Invite Friends & Earn ₹50</h3>
-                                    <p>Share your referral code and earn bonus when they play</p>
-                                </div>
-                                <button class="referral-btn" id="referralBtn">Invite</button>
-                            </div>
+                        <div class="banner-image">
+                            <img src="<?php echo $basePath; ?>/assets/images/banner-tournament.png" alt="Tournament" onerror="this.style.display='none'">
                         </div>
                     </div>
-                </section>
-
-                <section id="page-wallet" class="page">
-                    <div class="page-content">
-                        <div class="wallet-header">
-                            <h2 class="page-title">My Wallet</h2>
-                            <span class="wallet-amount-large" id="walletLarge">₹0.00</span>
-                            <span class="wallet-subtitle">Available Balance</span>
-                        </div>
-
-                        <div class="wallet-actions">
-                            <button class="wallet-action-btn primary" id="addMoneyBtn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 5v14M5 12h14"/>
-                                </svg>
-                                Add Money
-                            </button>
-                            <button class="wallet-action-btn secondary" id="withdrawBtn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                                </svg>
-                                Withdraw
-                            </button>
-                        </div>
-
-                        <div class="transaction-section">
-                            <div class="section-header">
-                                <h3 class="section-title">Recent Transactions</h3>
-                                <button class="section-view-all">See All</button>
-                            </div>
-                            <div class="transaction-list" id="transactionList"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="page-refer" class="page">
-                    <div class="page-content refer-page">
-                        <div class="refer-hero">
-                            <div class="refer-hero-icon">🎊</div>
-                            <h2 class="refer-hero-title">Refer & Earn</h2>
-                            <p class="refer-hero-sub">Invite your friends to play and earn ₹50 for each referral</p>
-                        </div>
-
-                        <div class="refer-code-box">
-                            <span class="refer-code-label">Your Referral Code</span>
-                            <div class="refer-code-display" id="referCodeDisplay">
-                                <span id="referCodeText">REF123456</span>
-                                <button class="copy-code-btn" id="copyCodeBtn">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="9" y="9" width="13" height="13" rx="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                                    </svg>
-                                    Copy
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="refer-stats">
-                            <div class="refer-stat-item">
-                                <span class="refer-stat-value" id="totalReferrals">0</span>
-                                <span class="refer-stat-label">Total Referrals</span>
-                            </div>
-                            <div class="refer-stat-item">
-                                <span class="refer-stat-value" id="referralBonus">₹0</span>
-                                <span class="refer-stat-label">Bonus Earned</span>
-                            </div>
-                            <div class="refer-stat-item">
-                                <span class="refer-stat-value" id="activeReferrals">0</span>
-                                <span class="refer-stat-label">Active Referrals</span>
-                            </div>
-                        </div>
-
-                        <div class="refer-steps">
-                            <h3 class="steps-title">How It Works</h3>
-                            <div class="step-item">
-                                <span class="step-number">1</span>
-                                <div class="step-content">
-                                    <span class="step-title">Share Your Code</span>
-                                    <p class="step-desc">Send your referral code to friends via WhatsApp, SMS, or social media</p>
-                                </div>
-                            </div>
-                            <div class="step-item">
-                                <span class="step-number">2</span>
-                                <div class="step-content">
-                                    <span class="step-title">Friend Signs Up</span>
-                                    <p class="step-desc">Your friend registers using your referral code and deposits ₹10+</p>
-                                </div>
-                            </div>
-                            <div class="step-item">
-                                <span class="step-number">3</span>
-                                <div class="step-content">
-                                    <span class="step-title">Get Bonus</span>
-                                    <p class="step-desc">You instantly receive ₹50 bonus in your wallet</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button class="share-refer-btn" id="shareReferBtn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="18" cy="5" r="3"/>
-                                <circle cx="6" cy="12" r="3"/>
-                                <circle cx="18" cy="19" r="3"/>
-                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                            </svg>
-                            Share Referral Link
-                        </button>
-                    </div>
-                </section>
-
-                <section id="page-history" class="page">
-                    <div class="page-content">
-                        <h2 class="page-title">Match History</h2>
-
-                        <div class="history-filters">
-                            <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="won">Won</button>
-                            <button class="filter-btn" data-filter="lost">Lost</button>
-                            <button class="filter-btn" data-filter="pending">Pending</button>
-                        </div>
-
-                        <div class="history-list" id="historyList"></div>
-                    </div>
-                </section>
-
-                <section id="page-profile" class="page">
-                    <div class="page-content">
-                        <div class="profile-header">
-                            <div class="profile-avatar-large">
-                                <span class="avatar-initials">G</span>
-                            </div>
-                            <h2 class="profile-name" id="profileName">Guest User</h2>
-                            <span class="profile-id" id="profileId">ID: #GUEST001</span>
-                            <div class="profile-rating">
-                                <span class="rating-stars">★★★★★</span>
-                                <span class="rating-score">4.8</span>
-                            </div>
-                        </div>
-
-                        <div class="profile-stats">
-                            <div class="profile-stat">
-                                <span class="profile-stat-value" id="statMatches">0</span>
-                                <span class="profile-stat-label">Matches</span>
-                            </div>
-                            <div class="profile-stat">
-                                <span class="profile-stat-value" id="statWins">0</span>
-                                <span class="profile-stat-label">Wins</span>
-                            </div>
-                            <div class="profile-stat">
-                                <span class="profile-stat-value" id="statEarnings">₹0</span>
-                                <span class="profile-stat-label">Earnings</span>
-                            </div>
-                            <div class="profile-stat">
-                                <span class="profile-stat-value" id="statRating">1200</span>
-                                <span class="profile-stat-label">ELO Rating</span>
-                            </div>
-                        </div>
-
-                        <div class="profile-menu">
-                            <div class="profile-menu-item" id="editProfileBtn">
-                                <span class="menu-icon">👤</span>
-                                <span class="menu-label">Edit Profile</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item" id="changePasswordBtn">
-                                <span class="menu-icon">🔒</span>
-                                <span class="menu-label">Change Password</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item" id="gameSettingsBtn">
-                                <span class="menu-icon">⚙️</span>
-                                <span class="menu-label">Game Settings</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item" id="responsibleGamingBtn">
-                                <span class="menu-icon">🛡️</span>
-                                <span class="menu-label">Responsible Gaming</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item" id="termsBtn">
-                                <span class="menu-icon">📜</span>
-                                <span class="menu-label">Terms & Conditions</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item" id="privacyBtn">
-                                <span class="menu-icon">🔐</span>
-                                <span class="menu-label">Privacy Policy</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                            <div class="profile-menu-item logout" id="logoutBtn">
-                                <span class="menu-icon">🚪</span>
-                                <span class="menu-label">Logout</span>
-                                <span class="menu-arrow">›</span>
-                            </div>
-                        </div>
-
-                        <div class="auth-section" id="authSection">
-                            <button class="auth-btn login" id="loginBtn">Login</button>
-                            <button class="auth-btn register" id="registerBtn">Register</button>
-                        </div>
-                    </div>
-                </section>
-
-            </main>
-
-            <nav id="bottom-nav">
-                <div class="nav-item active" data-page="dashboard">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/>
-                    </svg>
-                    <span>Home</span>
                 </div>
-                <div class="nav-item" data-page="wallet">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 12V8H6a2 2 0 01-2-2c0-1.1.9-2 2-2h12v4"/>
-                        <path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/>
-                        <path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/>
-                    </svg>
-                    <span>Wallet</span>
-                </div>
-                <div class="nav-item nav-center" data-page="refer">
-                    <div class="nav-center-btn">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                    </div>
-                    <span>Refer</span>
-                </div>
-                <div class="nav-item" data-page="history">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
-                    </svg>
-                    <span>History</span>
-                </div>
-                <div class="nav-item" data-page="profile">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                        <circle cx="12" cy="7" r="4"/>
-                    </svg>
-                    <span>Profile</span>
-                </div>
-            </nav>
-
-            <div id="authModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2 id="authModalTitle">Login</h2>
-                        <button class="modal-close" id="authModalClose">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="loginForm" class="auth-form active">
-                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                            <div class="form-group">
-                                <label for="loginMobile">Mobile Number / Username / Email</label>
-                                <input type="text" id="loginMobile" name="mobile" placeholder="Enter mobile, username or email" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="loginPassword">Password</label>
-                                <input type="password" id="loginPassword" name="password" placeholder="Enter your password" required minlength="6">
-                            </div>
-                            <button type="submit" class="auth-submit-btn">Login</button>
-                            <p class="auth-switch">Don't have an account? <a href="#" id="switchToRegister">Register</a></p>
-                        </form>
-
-                        <form id="registerForm" class="auth-form">
-                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-                            <div class="form-group">
-                                <label for="regUsername">Username</label>
-                                <input type="text" id="regUsername" name="username" placeholder="Choose a username" required minlength="3" maxlength="50">
-                            </div>
-                            <div class="form-group">
-                                <label for="regMobile">Mobile Number</label>
-                                <input type="tel" id="regMobile" name="mobile" placeholder="Enter 10-digit mobile number" required maxlength="10" pattern="[0-9]{10}">
-                            </div>
-                            <div class="form-group">
-                                <label for="regEmail">Email (Optional)</label>
-                                <input type="email" id="regEmail" name="email" placeholder="Enter your email" maxlength="100">
-                            </div>
-                            <div class="form-group">
-                                <label for="regPassword">Password</label>
-                                <input type="password" id="regPassword" name="password" placeholder="Min 6 characters" required minlength="6">
-                            </div>
-                            <div class="form-group">
-                                <label for="regReferral">Referral Code (Optional)</label>
-                                <input type="text" id="regReferral" name="referral_code" placeholder="Enter referral code" maxlength="20">
-                            </div>
-                            <div class="form-group checkbox">
-                                <input type="checkbox" id="regTerms" name="terms" required>
-                                <label for="regTerms">I agree to the Terms & Conditions and Privacy Policy</label>
-                            </div>
-                            <button type="submit" class="auth-submit-btn">Register</button>
-                            <p class="auth-switch">Already have an account? <a href="#" id="switchToLogin">Login</a></p>
-                        </form>
+                
+                <!-- Banner 4: Safe & Secure -->
+                <div class="banner-slide">
+                    <div class="banner-card banner-4">
+                        <div class="banner-content">
+                            <h2 class="banner-title">🔒 100% Safe & Legal</h2>
+                            <p class="banner-desc">Skill-based gaming platform</p>
+                            <button class="banner-btn" onclick="openAuthModal('register')">Get Started →</button>
+                        </div>
+                        <div class="banner-image">
+                            <img src="<?php echo $basePath; ?>/assets/images/banner-secure.png" alt="Secure" onerror="this.style.display='none'">
+                        </div>
                     </div>
                 </div>
             </div>
-
-            <div id="toast" class="toast hidden">
-                <span id="toastMessage">Notification</span>
+            
+            <!-- Banner Dots -->
+            <div class="banner-dots" id="bannerDots">
+                <span class="dot active" data-index="0"></span>
+                <span class="dot" data-index="1"></span>
+                <span class="dot" data-index="2"></span>
+                <span class="dot" data-index="3"></span>
             </div>
-
         </div>
+
+        <!-- ==============================================
+        MAIN CONTENT AREA
+        ============================================== -->
+        <main class="main-content" id="appMain">
+            
+            <!-- DASHBOARD PAGE -->
+            <section id="page-dashboard" class="page active">
+                <!-- Quick Stats Row -->
+                <div class="quick-stats-row">
+                    <div class="stat-item">
+                        <span class="stat-icon">👥</span>
+                        <span class="stat-value" id="onlineCount">2,847</span>
+                        <span class="stat-label">Online</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🏆</span>
+                        <span class="stat-value">₹2.4L</span>
+                        <span class="stat-label">Won Today</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">4.8</span>
+                        <span class="stat-label">Rating</span>
+                    </div>
+                </div>
+
+                <!-- Section: Quick Play -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3 class="section-title">🎮 Quick Play</h3>
+                    </div>
+                    <div class="quick-play-grid">
+                        <div class="quick-play-card" onclick="handleQuickPlay(10, 1)">
+                            <div class="qp-icon">🎲</div>
+                            <div class="qp-info">
+                                <span class="qp-name">Beginner</span>
+                                <span class="qp-entry">Entry ₹10</span>
+                            </div>
+                            <div class="qp-prize">Win ₹17</div>
+                        </div>
+                        <div class="quick-play-card featured" onclick="handleQuickPlay(20, 2)">
+                            <div class="qp-icon">🔥</div>
+                            <div class="qp-info">
+                                <span class="qp-name">Popular</span>
+                                <span class="qp-entry">Entry ₹20</span>
+                            </div>
+                            <div class="qp-prize">Win ₹34</div>
+                        </div>
+                        <div class="quick-play-card" onclick="handleQuickPlay(50, 3)">
+                            <div class="qp-icon">💎</div>
+                            <div class="qp-info">
+                                <span class="qp-name">Premium</span>
+                                <span class="qp-entry">Entry ₹50</span>
+                            </div>
+                            <div class="qp-prize">Win ₹85</div>
+                        </div>
+                        <div class="quick-play-card premium" onclick="handleQuickPlay(100, 4)">
+                            <div class="qp-icon">👑</div>
+                            <div class="qp-info">
+                                <span class="qp-name">Pro</span>
+                                <span class="qp-entry">Entry ₹100</span>
+                            </div>
+                            <div class="qp-prize">Win ₹170</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Tournament Tickets (Zupee Style Cards) -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3 class="section-title">🎟️ Tournament Tickets</h3>
+                        <button class="btn-view-all" onclick="navigateTo('tournaments')">View All →</button>
+                    </div>
+                    
+                    <div class="tournament-grid-zupee" id="tournamentGrid">
+                        <!-- Card 1 -->
+                        <div class="tournament-card-zupee" onclick="handleJoinTournament(10, 1)">
+                            <div class="tcz-header">
+                                <span class="tcz-badge badge-green">Entry ₹10</span>
+                                <span class="tcz-players">2/4</span>
+                            </div>
+                            <div class="tcz-body">
+                                <div class="tcz-prize-row">
+                                    <span class="tcz-prize-label">Prize Pool</span>
+                                    <span class="tcz-prize-amount">₹17</span>
+                                </div>
+                                <div class="tcz-progress">
+                                    <div class="tcz-progress-bar" style="width: 50%;"></div>
+                                </div>
+                                <div class="tcz-info-row">
+                                    <span>🎯 4 Players</span>
+                                    <span>⏱️ 15 min</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="tournament-card-zupee featured-card" onclick="handleJoinTournament(20, 2)">
+                            <div class="tcz-header">
+                                <span class="tcz-badge badge-orange">Entry ₹20</span>
+                                <span class="tcz-players">3/4</span>
+                            </div>
+                            <div class="tcz-body">
+                                <div class="tcz-prize-row">
+                                    <span class="tcz-prize-label">Prize Pool</span>
+                                    <span class="tcz-prize-amount">₹34</span>
+                                </div>
+                                <div class="tcz-progress">
+                                    <div class="tcz-progress-bar" style="width: 75%;"></div>
+                                </div>
+                                <div class="tcz-info-row">
+                                    <span>🎯 4 Players</span>
+                                    <span>⏱️ 15 min</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3 -->
+                        <div class="tournament-card-zupee" onclick="handleJoinTournament(50, 3)">
+                            <div class="tcz-header">
+                                <span class="tcz-badge badge-purple">Entry ₹50</span>
+                                <span class="tcz-players">1/4</span>
+                            </div>
+                            <div class="tcz-body">
+                                <div class="tcz-prize-row">
+                                    <span class="tcz-prize-label">Prize Pool</span>
+                                    <span class="tcz-prize-amount">₹85</span>
+                                </div>
+                                <div class="tcz-progress">
+                                    <div class="tcz-progress-bar" style="width: 25%;"></div>
+                                </div>
+                                <div class="tcz-info-row">
+                                    <span>🎯 4 Players</span>
+                                    <span>⏱️ 15 min</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 4 -->
+                        <div class="tournament-card-zupee premium-card" onclick="handleJoinTournament(100, 4)">
+                            <div class="tcz-header">
+                                <span class="tcz-badge badge-gold">Entry ₹100</span>
+                                <span class="tcz-players">1/4</span>
+                            </div>
+                            <div class="tcz-body">
+                                <div class="tcz-prize-row">
+                                    <span class="tcz-prize-label">Prize Pool</span>
+                                    <span class="tcz-prize-amount">₹170</span>
+                                </div>
+                                <div class="tcz-progress">
+                                    <div class="tcz-progress-bar" style="width: 25%;"></div>
+                                </div>
+                                <div class="tcz-info-row">
+                                    <span>🎯 4 Players</span>
+                                    <span>⏱️ 15 min</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: How to Play -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3 class="section-title">📖 How to Play</h3>
+                    </div>
+                    <div class="how-to-play">
+                        <div class="htp-step">
+                            <div class="htp-number">1</div>
+                            <div class="htp-text">
+                                <strong>Sign Up</strong>
+                                <p>Create your account in seconds</p>
+                            </div>
+                        </div>
+                        <div class="htp-step">
+                            <div class="htp-number">2</div>
+                            <div class="htp-text">
+                                <strong>Add Cash</strong>
+                                <p>Deposit via UPI, cards or netbanking</p>
+                            </div>
+                        </div>
+                        <div class="htp-step">
+                            <div class="htp-number">3</div>
+                            <div class="htp-text">
+                                <strong>Play & Win</strong>
+                                <p>Beat opponents & withdraw winnings</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- WALLET PAGE -->
+            <section id="page-wallet" class="page">
+                <div class="wallet-page-container">
+                    <div class="wallet-balance-card">
+                        <span class="wbc-label">Available Balance</span>
+                        <span class="wbc-amount" id="walletLarge">₹0.00</span>
+                        <span class="wbc-sub">+ ₹50 bonus on first deposit</span>
+                        <div class="wbc-actions">
+                            <button class="btn-add-cash" id="addMoneyBtn">+ Add Cash</button>
+                            <button class="btn-withdraw" id="withdrawBtn">Withdraw</button>
+                        </div>
+                    </div>
+                    <div class="transaction-list" id="transactionList">
+                        <div class="tx-empty">No transactions yet</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- REFER PAGE -->
+            <section id="page-refer" class="page">
+                <div class="refer-container">
+                    <div class="refer-hero-card">
+                        <span class="refer-icon">🎁</span>
+                        <h2>Refer & Earn ₹50</h2>
+                        <p>Share your code with friends</p>
+                        <div class="refer-code-box">
+                            <span id="referCodeText">REF123456</span>
+                            <button class="btn-copy" id="copyCodeBtn">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- HISTORY PAGE -->
+            <section id="page-history" class="page">
+                <div class="history-container">
+                    <div class="history-filters-zupee">
+                        <button class="filter-btn-zupee active" data-filter="all">All</button>
+                        <button class="filter-btn-zupee" data-filter="won">Won</button>
+                        <button class="filter-btn-zupee" data-filter="lost">Lost</button>
+                    </div>
+                    <div class="history-list-zupee" id="historyList">
+                        <div class="history-empty">No matches played yet</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROFILE PAGE -->
+            <section id="page-profile" class="page">
+                <div class="profile-container">
+                    <div class="profile-header-card">
+                        <div class="profile-avatar-zupee">G</div>
+                        <h3 id="profileName">Guest User</h3>
+                        <span id="profileId">ID: #GUEST001</span>
+                    </div>
+                    <div class="profile-stats-zupee">
+                        <div class="ps-item">
+                            <span id="statMatches">0</span>
+                            <label>Matches</label>
+                        </div>
+                        <div class="ps-item">
+                            <span id="statWins">0</span>
+                            <label>Wins</label>
+                        </div>
+                        <div class="ps-item">
+                            <span id="statEarnings">₹0</span>
+                            <label>Earnings</label>
+                        </div>
+                        <div class="ps-item">
+                            <span id="statRating">1200</span>
+                            <label>ELO</label>
+                        </div>
+                    </div>
+                    <div class="profile-menu-zupee">
+                        <button class="pm-item" id="loginBtn">🔑 Login</button>
+                        <button class="pm-item" id="registerBtn">📝 Register</button>
+                        <button class="pm-item" id="logoutBtn" style="display:none;">🚪 Logout</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- ==============================================
+        BOTTOM NAVIGATION (ZUPPEE STYLE)
+        ============================================== -->
+        <nav class="bottom-nav-zupee" id="bottomNav">
+            <button class="bn-item active" data-page="dashboard">
+                <span class="bn-icon">🏠</span>
+                <span class="bn-label">Home</span>
+            </button>
+            <button class="bn-item" data-page="wallet">
+                <span class="bn-icon">💳</span>
+                <span class="bn-label">Wallet</span>
+            </button>
+            <button class="bn-item bn-center" data-page="refer">
+                <div class="bn-center-btn">
+                    <span>🎁</span>
+                </div>
+                <span class="bn-label">Refer</span>
+            </button>
+            <button class="bn-item" data-page="history">
+                <span class="bn-icon">📋</span>
+                <span class="bn-label">History</span>
+            </button>
+            <button class="bn-item" data-page="profile">
+                <span class="bn-icon">👤</span>
+                <span class="bn-label">Profile</span>
+            </button>
+        </nav>
+
+        <!-- ==============================================
+        AUTH MODAL (ZUPPEE STYLE)
+        ============================================== -->
+        <div class="modal-overlay-zupee" id="authModal">
+            <div class="modal-card-zupee">
+                <div class="modal-header-zupee">
+                    <h2 id="authModalTitle">Welcome Back!</h2>
+                    <button class="modal-close-zupee" id="authModalClose">✕</button>
+                </div>
+                <div class="modal-body-zupee">
+                    <!-- Login Form -->
+                    <form id="loginForm" class="auth-form-zupee active">
+                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="form-group-zupee">
+                            <label>Mobile / Username / Email</label>
+                            <input type="text" id="loginMobile" placeholder="Enter mobile, username or email" required>
+                        </div>
+                        <div class="form-group-zupee">
+                            <label>Password</label>
+                            <input type="password" id="loginPassword" placeholder="Enter password" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn-auth-submit">Login</button>
+                        <p class="auth-switch-text">Don't have an account? <a href="#" id="switchToRegister">Register</a></p>
+                    </form>
+
+                    <!-- Register Form -->
+                    <form id="registerForm" class="auth-form-zupee">
+                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+                        <div class="form-group-zupee">
+                            <label>Username</label>
+                            <input type="text" id="regUsername" placeholder="Choose username" required minlength="3">
+                        </div>
+                        <div class="form-group-zupee">
+                            <label>Mobile Number</label>
+                            <input type="tel" id="regMobile" placeholder="10-digit mobile" required maxlength="10">
+                        </div>
+                        <div class="form-group-zupee">
+                            <label>Email (Optional)</label>
+                            <input type="email" id="regEmail" placeholder="your@email.com">
+                        </div>
+                        <div class="form-group-zupee">
+                            <label>Password</label>
+                            <input type="password" id="regPassword" placeholder="Min 6 characters" required minlength="6">
+                        </div>
+                        <div class="form-group-zupee">
+                            <label>Referral Code (Optional)</label>
+                            <input type="text" id="regReferral" placeholder="Enter code">
+                        </div>
+                        <div class="form-group-zupee checkbox-group">
+                            <input type="checkbox" id="regTerms" required>
+                            <label for="regTerms">I agree to Terms & Conditions</label>
+                        </div>
+                        <button type="submit" class="btn-auth-submit">Create Account</button>
+                        <p class="auth-switch-text">Already have an account? <a href="#" id="switchToLogin">Login</a></p>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification -->
+        <div class="toast-zupee" id="toast">
+            <span id="toastMessage"></span>
+        </div>
+
     </div>
 
-    <script src="<?php echo $basePath; ?>/assets/js/pwa-installer.js"></script>
+    <!-- ==============================================
+    SCRIPTS
+    ============================================== -->
     <script src="<?php echo $basePath; ?>/assets/js/auth-helper.js"></script>
-
     <script>
-    class App {
-        constructor() {
-            this.currentPage = 'dashboard';
-            this.isLoggedIn = false;
-            this.walletBalance = 0;
-            this.userData = null;
-            this.basePath = '<?php echo $basePath; ?>';
-            this.csrfToken = '<?php echo htmlspecialchars($csrf_token); ?>';
-            this.init();
-        }
-
-        init() {
-            this.bindEvents();
-            this.checkAuthStatus();
-            this.showPage('dashboard');
-            this.loadWalletFromStorage();
-        }
-
-        loadWalletFromStorage() {
-            const savedBalance = localStorage.getItem('walletBalance');
-            if (savedBalance) {
-                try {
-                    this.walletBalance = parseFloat(savedBalance) || 0;
-                    this.updateWalletUI();
-                } catch (e) {
-                    console.error('Wallet load error:', e);
-                }
-            }
-        }
-
-        bindEvents() {
-            // Navigation
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const page = item.dataset.page;
-                    if (page) {
-                        this.showPage(page);
-                        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-                        item.classList.add('active');
-                    }
-                });
-            });
-
-            // Tournament Join
-            document.querySelectorAll('.card-join-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const entry = parseFloat(btn.dataset.entry);
-                    const tournamentId = parseInt(btn.dataset.tournamentId) || 1;
-                    this.handleJoinTournament(entry, tournamentId);
-                });
-            });
-
-            // Wallet
-            document.getElementById('walletAddBtn')?.addEventListener('click', () => {
-                this.showPage('wallet');
-                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-                document.querySelector('.nav-item[data-page="wallet"]')?.classList.add('active');
-            });
-
-            // Referral
-            document.getElementById('referralBtn')?.addEventListener('click', () => {
-                this.showPage('refer');
-                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-                document.querySelector('.nav-item[data-page="refer"]')?.classList.add('active');
-            });
-
-            // Copy Code
-            document.getElementById('copyCodeBtn')?.addEventListener('click', () => {
-                const code = document.getElementById('referCodeText')?.textContent || 'REF123456';
-                navigator.clipboard?.writeText(code).then(() => {
-                    this.showToast('✅ Referral code copied!');
-                }).catch(() => {
-                    const input = document.createElement('input');
-                    input.value = code;
-                    document.body.appendChild(input);
-                    input.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(input);
-                    this.showToast('✅ Referral code copied!');
-                });
-            });
-
-            // Auth Modal
-            document.getElementById('loginBtn')?.addEventListener('click', () => this.openAuthModal('login'));
-            document.getElementById('registerBtn')?.addEventListener('click', () => this.openAuthModal('register'));
-            document.getElementById('authModalClose')?.addEventListener('click', () => this.closeAuthModal());
-
-            document.getElementById('switchToRegister')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.openAuthModal('register');
-            });
-
-            document.getElementById('switchToLogin')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.openAuthModal('login');
-            });
-
-            // Forms
-            document.getElementById('loginForm')?.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleLogin();
-            });
-
-            document.getElementById('registerForm')?.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleRegister();
-            });
-
-            // Logout
-            document.getElementById('logoutBtn')?.addEventListener('click', () => this.handleLogout());
-
-            // Wallet Actions
-            document.getElementById('addMoneyBtn')?.addEventListener('click', () => {
-                this.showToast('💳 Add money feature coming soon');
-            });
-
-            document.getElementById('withdrawBtn')?.addEventListener('click', () => {
-                this.showToast('🏦 Withdraw feature coming soon');
-            });
-
-            // History Filters
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    this.filterHistory(btn.dataset.filter);
-                });
-            });
-
-            // Modal backdrop
-            document.getElementById('authModal')?.addEventListener('click', (e) => {
-                if (e.target === e.currentTarget) this.closeAuthModal();
-            });
-        }
-
-        showPage(pageId) {
-            if (!pageId) return;
-            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-            const target = document.getElementById(`page-${pageId}`);
-            if (target) {
-                target.classList.add('active');
-                this.currentPage = pageId;
-            }
-        }
-
-        async checkAuthStatus() {
-            try {
-                const result = await AuthHelper.checkAuth();
-                if (result.success && result.data?.logged_in) {
-                    this.isLoggedIn = true;
-                    this.userData = result.data.user;
-                    this.updateAuthUI(true);
-                    this.updateUserInfo(result.data.user);
-                    
-                    if (result.data.user?.wallet_balance !== undefined) {
-                        this.walletBalance = parseFloat(result.data.user.wallet_balance) || 0;
-                        this.updateWalletUI();
-                        localStorage.setItem('walletBalance', this.walletBalance.toString());
-                    }
-                    
-                    if (result.data.csrf_token) {
-                        this.csrfToken = result.data.csrf_token;
-                        this.updateCsrfTokens(result.data.csrf_token);
-                    }
-                } else {
-                    this.isLoggedIn = false;
-                    this.updateAuthUI(false);
-                }
-            } catch (error) {
-                console.error('Auth check error:', error);
+        // ==============================================
+        // ZUPPEE LUDO APP CONTROLLER
+        // ==============================================
+        class ZupeeApp {
+            constructor() {
+                this.currentPage = 'dashboard';
                 this.isLoggedIn = false;
-                this.updateAuthUI(false);
-            }
-        }
-
-        updateCsrfTokens(token) {
-            document.querySelectorAll('input[name="csrf_token"]').forEach(input => {
-                input.value = token;
-            });
-            this.csrfToken = token;
-        }
-
-        updateAuthUI(loggedIn) {
-            const authSection = document.getElementById('authSection');
-            const displayUsername = document.getElementById('displayUsername');
-            const profileName = document.getElementById('profileName');
-            const profileId = document.getElementById('profileId');
-
-            if (loggedIn && this.userData) {
-                if (authSection) authSection.style.display = 'none';
-                const username = this.userData.username || 'Player';
-                if (displayUsername) displayUsername.textContent = username;
-                if (profileName) profileName.textContent = username;
-                if (profileId) profileId.textContent = `ID: #${this.userData.id || 'GUEST001'}`;
-                const avatarText = document.querySelector('.avatar-text');
-                if (avatarText) avatarText.textContent = username[0].toUpperCase();
-            } else {
-                if (authSection) authSection.style.display = 'flex';
-                if (displayUsername) displayUsername.textContent = 'Guest';
-                if (profileName) profileName.textContent = 'Guest User';
-                if (profileId) profileId.textContent = 'ID: #GUEST001';
-                const avatarText = document.querySelector('.avatar-text');
-                if (avatarText) avatarText.textContent = 'G';
-            }
-        }
-
-        updateUserInfo(user) {
-            if (!user) return;
-
-            if (user.wallet_balance !== undefined) {
-                this.walletBalance = parseFloat(user.wallet_balance) || 0;
-                this.updateWalletUI();
-                localStorage.setItem('walletBalance', this.walletBalance.toString());
+                this.walletBalance = 0;
+                this.userData = null;
+                this.basePath = '<?php echo $basePath; ?>';
+                this.csrfToken = '<?php echo htmlspecialchars($csrf_token); ?>';
+                this.bannerIndex = 0;
+                this.bannerInterval = null;
+                this.init();
             }
 
-            document.getElementById('statMatches').textContent = user.total_matches_played || 0;
-            document.getElementById('statWins').textContent = user.total_matches_won || 0;
-            document.getElementById('statEarnings').textContent = `₹${(user.total_earnings || 0).toFixed(2)}`;
-            document.getElementById('statRating').textContent = user.elo_rating || 1200;
-
-            if (user.refer_code) {
-                document.getElementById('referCodeText').textContent = user.refer_code;
-            }
-            if (user.referral_earnings !== undefined) {
-                document.getElementById('referralBonus').textContent = `₹${(user.referral_earnings || 0).toFixed(0)}`;
-            }
-        }
-
-        updateWalletUI() {
-            const walletBalance = document.getElementById('walletBalance');
-            const walletLarge = document.getElementById('walletLarge');
-            if (walletBalance) walletBalance.textContent = `₹${this.walletBalance.toFixed(2)}`;
-            if (walletLarge) walletLarge.textContent = `₹${this.walletBalance.toFixed(2)}`;
-        }
-
-        openAuthModal(type) {
-            const modal = document.getElementById('authModal');
-            const title = document.getElementById('authModalTitle');
-            const loginForm = document.getElementById('loginForm');
-            const registerForm = document.getElementById('registerForm');
-
-            if (type === 'login') {
-                title.textContent = 'Login';
-                loginForm.classList.add('active');
-                registerForm.classList.remove('active');
-            } else {
-                title.textContent = 'Register';
-                loginForm.classList.remove('active');
-                registerForm.classList.add('active');
+            init() {
+                this.bindNavigation();
+                this.bindAuthEvents();
+                this.bindTournamentEvents();
+                this.startBannerCarousel();
+                this.checkAuthStatus();
             }
 
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
+            // ==========================================
+            // BANNER CAROUSEL
+            // ==========================================
+            startBannerCarousel() {
+                const track = document.getElementById('bannerTrack');
+                const dots = document.querySelectorAll('#bannerDots .dot');
+                const totalSlides = 4;
 
-        closeAuthModal() {
-            const modal = document.getElementById('authModal');
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
+                const updateBanner = (index) => {
+                    track.style.transform = `translateX(-${index * 100}%)`;
+                    dots.forEach(d => d.classList.remove('active'));
+                    dots[index]?.classList.add('active');
+                };
 
-        async handleLogin() {
-            const form = document.getElementById('loginForm');
-            const formData = new FormData(form);
+                // Auto-advance every 4 seconds
+                this.bannerInterval = setInterval(() => {
+                    this.bannerIndex = (this.bannerIndex + 1) % totalSlides;
+                    updateBanner(this.bannerIndex);
+                }, 4000);
 
-            const data = {
-                username: formData.get('mobile'),
-                password: formData.get('password')
-            };
+                // Dot click navigation
+                dots.forEach(dot => {
+                    dot.addEventListener('click', () => {
+                        this.bannerIndex = parseInt(dot.dataset.index);
+                        updateBanner(this.bannerIndex);
+                        clearInterval(this.bannerInterval);
+                        this.bannerInterval = setInterval(() => {
+                            this.bannerIndex = (this.bannerIndex + 1) % totalSlides;
+                            updateBanner(this.bannerIndex);
+                        }, 4000);
+                    });
+                });
 
-            if (!data.username || data.username.length < 3) {
-                this.showToast('❌ Please enter mobile, username or email');
-                return;
+                // Touch swipe
+                let touchStartX = 0;
+                let touchEndX = 0;
+                const bannerCarousel = document.getElementById('bannerCarousel');
+                bannerCarousel.addEventListener('touchstart', (e) => {
+                    touchStartX = e.changedTouches[0].screenX;
+                });
+                bannerCarousel.addEventListener('touchend', (e) => {
+                    touchEndX = e.changedTouches[0].screenX;
+                    if (touchStartX - touchEndX > 50) {
+                        this.bannerIndex = (this.bannerIndex + 1) % totalSlides;
+                    } else if (touchEndX - touchStartX > 50) {
+                        this.bannerIndex = (this.bannerIndex - 1 + totalSlides) % totalSlides;
+                    }
+                    updateBanner(this.bannerIndex);
+                });
             }
-            if (!data.password || data.password.length < 6) {
-                this.showToast('❌ Password must be at least 6 characters');
-                return;
+
+            // ==========================================
+            // NAVIGATION
+            // ==========================================
+            bindNavigation() {
+                document.querySelectorAll('.bn-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const page = item.dataset.page;
+                        this.navigateTo(page);
+                    });
+                });
             }
 
-            const btn = form.querySelector('.auth-submit-btn');
-            const originalText = btn.textContent;
-            btn.textContent = 'Logging in...';
-            btn.disabled = true;
+            navigateTo(page) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                const target = document.getElementById(`page-${page}`);
+                if (target) {
+                    target.classList.add('active');
+                    this.currentPage = page;
+                }
 
-            try {
-                const result = await AuthHelper.login(data);
+                document.querySelectorAll('.bn-item').forEach(n => n.classList.remove('active'));
+                const navItem = document.querySelector(`.bn-item[data-page="${page}"]`);
+                if (navItem) navItem.classList.add('active');
+
+                document.getElementById('appMain').scrollTop = 0;
+            }
+
+            // ==========================================
+            // AUTH EVENTS
+            // ==========================================
+            bindAuthEvents() {
+                document.getElementById('loginBtn')?.addEventListener('click', () => this.openAuthModal('login'));
+                document.getElementById('registerBtn')?.addEventListener('click', () => this.openAuthModal('register'));
+                document.getElementById('headerLoginBtn')?.addEventListener('click', () => this.openAuthModal('login'));
+                document.getElementById('authModalClose')?.addEventListener('click', () => this.closeAuthModal());
+                document.getElementById('authModal')?.addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) this.closeAuthModal();
+                });
+
+                document.getElementById('switchToRegister')?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.openAuthModal('register');
+                });
+                document.getElementById('switchToLogin')?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.openAuthModal('login');
+                });
+
+                document.getElementById('loginForm')?.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
+                document.getElementById('registerForm')?.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleRegister();
+                });
+
+                document.getElementById('logoutBtn')?.addEventListener('click', () => this.handleLogout());
+            }
+
+            openAuthModal(type) {
+                const modal = document.getElementById('authModal');
+                const title = document.getElementById('authModalTitle');
+                const loginForm = document.getElementById('loginForm');
+                const registerForm = document.getElementById('registerForm');
+
+                if (type === 'login') {
+                    title.textContent = 'Welcome Back!';
+                    loginForm.classList.add('active');
+                    registerForm.classList.remove('active');
+                } else {
+                    title.textContent = 'Create Account';
+                    loginForm.classList.remove('active');
+                    registerForm.classList.add('active');
+                }
+
+                modal.classList.add('active');
+            }
+
+            closeAuthModal() {
+                document.getElementById('authModal').classList.remove('active');
+            }
+
+            async handleLogin() {
+                const username = document.getElementById('loginMobile').value.trim();
+                const password = document.getElementById('loginPassword').value;
+
+                if (!username || password.length < 6) {
+                    this.showToast('Please fill all fields correctly', 'error');
+                    return;
+                }
+
+                const result = await AuthHelper.login({ username, password });
                 if (result.success) {
                     this.isLoggedIn = true;
                     this.userData = result.data.user;
-                    this.updateAuthUI(true);
-                    this.updateUserInfo(result.data.user);
-                    
-                    if (result.data.csrf_token) {
-                        this.csrfToken = result.data.csrf_token;
-                        this.updateCsrfTokens(result.data.csrf_token);
-                    }
-                    
+                    this.updateUI();
                     this.closeAuthModal();
-                    this.showToast('✅ Login successful! Welcome back!');
+                    this.showToast('✅ Login successful!', 'success');
                 } else {
-                    this.showToast('❌ ' + (result.message || 'Login failed'));
+                    this.showToast('❌ ' + (result.message || 'Login failed'), 'error');
                 }
-            } catch (error) {
-                console.error('Login error:', error);
-                this.showToast('❌ Network error. Please try again.');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
-        }
-
-        async handleRegister() {
-            const form = document.getElementById('registerForm');
-            const termsCheckbox = document.getElementById('regTerms');
-
-            if (!termsCheckbox.checked) {
-                this.showToast('❌ Please accept Terms & Conditions');
-                return;
             }
 
-            const formData = new FormData(form);
+            async handleRegister() {
+                if (!document.getElementById('regTerms').checked) {
+                    this.showToast('Please accept Terms & Conditions', 'error');
+                    return;
+                }
 
-            const data = {
-                username: formData.get('username'),
-                mobile: formData.get('mobile'),
-                email: formData.get('email') || '',
-                password: formData.get('password'),
-                referral_code: formData.get('referral_code') || ''
-            };
+                const data = {
+                    username: document.getElementById('regUsername').value.trim(),
+                    mobile: document.getElementById('regMobile').value.trim(),
+                    email: document.getElementById('regEmail').value.trim(),
+                    password: document.getElementById('regPassword').value,
+                    referral_code: document.getElementById('regReferral').value.trim()
+                };
 
-            if (!data.username || data.username.length < 3) {
-                this.showToast('❌ Username must be at least 3 characters');
-                return;
-            }
-            if (!data.mobile || data.mobile.length !== 10) {
-                this.showToast('❌ Please enter a valid 10-digit mobile number');
-                return;
-            }
-            if (!data.password || data.password.length < 6) {
-                this.showToast('❌ Password must be at least 6 characters');
-                return;
-            }
+                if (!data.username || !data.mobile || data.password.length < 6) {
+                    this.showToast('Please fill all required fields', 'error');
+                    return;
+                }
 
-            const btn = form.querySelector('.auth-submit-btn');
-            const originalText = btn.textContent;
-            btn.textContent = 'Registering...';
-            btn.disabled = true;
-
-            try {
                 const result = await AuthHelper.register(data);
                 if (result.success) {
                     this.isLoggedIn = true;
                     this.userData = result.data.user;
-                    this.updateAuthUI(true);
-                    this.updateUserInfo(result.data.user);
-                    
-                    if (result.data.csrf_token) {
-                        this.csrfToken = result.data.csrf_token;
-                        this.updateCsrfTokens(result.data.csrf_token);
-                    }
-                    
+                    this.updateUI();
                     this.closeAuthModal();
-                    this.showToast('✅ Registration successful! Welcome to Ludo Pro!');
+                    this.showToast('✅ Registration successful!', 'success');
                 } else {
-                    this.showToast('❌ ' + (result.message || 'Registration failed'));
+                    this.showToast('❌ ' + (result.message || 'Registration failed'), 'error');
                 }
-            } catch (error) {
-                console.error('Register error:', error);
-                this.showToast('❌ Network error. Please try again.');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
             }
-        }
 
-        async handleLogout() {
-            if (!confirm('Are you sure you want to logout?')) return;
+            async handleLogout() {
+                if (!confirm('Are you sure?')) return;
+                await AuthHelper.logout();
+                this.isLoggedIn = false;
+                this.userData = null;
+                this.updateUI();
+                this.showToast('Logged out', 'info');
+            }
 
-            try {
-                const result = await AuthHelper.logout();
-                if (result.success) {
-                    this.isLoggedIn = false;
-                    this.userData = null;
-                    this.updateAuthUI(false);
-                    this.walletBalance = 0;
-                    this.updateWalletUI();
-                    localStorage.removeItem('walletBalance');
-                    this.showToast('✅ Logged out successfully');
-                } else {
-                    this.showToast('❌ ' + (result.message || 'Logout failed'));
+            async checkAuthStatus() {
+                const result = await AuthHelper.checkAuth();
+                if (result.success && result.isLoggedIn) {
+                    this.isLoggedIn = true;
+                    this.userData = result.user;
+                    this.updateUI();
                 }
-            } catch (error) {
-                console.error('Logout error:', error);
-                this.showToast('❌ Network error. Please try again.');
-            }
-        }
-
-        handleJoinTournament(entryFee, tournamentId) {
-            if (!this.isLoggedIn) {
-                this.showToast('❌ Please login to join tournaments');
-                this.openAuthModal('login');
-                return;
             }
 
-            if (this.walletBalance < entryFee) {
-                this.showToast(`❌ Insufficient balance. Need ₹${entryFee.toFixed(2)}`);
-                this.showPage('wallet');
-                return;
+            updateUI() {
+                const loggedIn = this.isLoggedIn;
+                document.getElementById('loginBtn').style.display = loggedIn ? 'none' : 'block';
+                document.getElementById('registerBtn').style.display = loggedIn ? 'none' : 'block';
+                document.getElementById('logoutBtn').style.display = loggedIn ? 'block' : 'none';
+                document.getElementById('headerLoginBtn').style.display = loggedIn ? 'none' : 'inline-block';
+                
+                if (this.userData) {
+                    document.getElementById('profileName').textContent = this.userData.username || 'Player';
+                    document.getElementById('referCodeText').textContent = this.userData.refer_code || 'REF123456';
+                    this.walletBalance = parseFloat(this.userData.wallet_balance || 0);
+                    document.getElementById('headerBalance').textContent = '₹' + this.walletBalance.toFixed(0);
+                }
             }
 
-            this.showToast('⏳ Joining tournament...');
+            // ==========================================
+            // TOURNAMENT JOIN
+            // ==========================================
+            bindTournamentEvents() {
+                document.querySelectorAll('.tournament-card-zupee').forEach(card => {
+                    card.addEventListener('click', function() {
+                        const entry = parseInt(this.dataset.entry || 10);
+                        const tournamentId = parseInt(this.dataset.tournamentId || 1);
+                        window.app.handleJoinTournament(entry, tournamentId);
+                    });
+                });
+            }
 
-            const csrfToken = this.csrfToken || document.querySelector('input[name="csrf_token"]')?.value || '';
+            handleQuickPlay(entry, tournamentId) {
+                this.handleJoinTournament(entry, tournamentId);
+            }
 
-            fetch(this.basePath + '/api/match.php?action=join', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    entry_fee: entryFee,
-                    tournament_id: tournamentId,
-                    csrf_token: csrfToken
-                })
-            })
-            .then(async res => {
-                const text = await res.text();
+            async handleJoinTournament(entryFee, tournamentId) {
+                if (!this.isLoggedIn) {
+                    this.showToast('Please login to play', 'error');
+                    this.openAuthModal('login');
+                    return;
+                }
+
+                if (this.walletBalance < entryFee) {
+                    this.showToast(`Need ₹${entryFee} to join. Please add cash.`, 'error');
+                    this.navigateTo('wallet');
+                    return;
+                }
+
+                this.showToast('Joining tournament...', 'info');
+
                 try {
-                    return JSON.parse(text);
-                } catch {
-                    throw new Error('Invalid response from server');
-                }
-            })
-            .then(data => {
-                if (data.success) {
-                    if (data.data.balance_after !== undefined) {
-                        this.walletBalance = data.data.balance_after;
-                        this.updateWalletUI();
-                        localStorage.setItem('walletBalance', this.walletBalance.toString());
+                    const response = await fetch(`${this.basePath}/api/match.php?action=join`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': this.csrfToken
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            entry_fee: entryFee,
+                            tournament_id: tournamentId,
+                            csrf_token: this.csrfToken
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
+                        this.walletBalance = data.data.balance_after || (this.walletBalance - entryFee);
+                        document.getElementById('headerBalance').textContent = '₹' + this.walletBalance.toFixed(0);
+                        this.showToast('✅ Match found! Redirecting...', 'success');
+                        if (data.data.match_id) {
+                            setTimeout(() => {
+                                window.location.href = `${this.basePath}/game.php?match_id=${data.data.match_id}`;
+                            }, 1000);
+                        }
+                    } else {
+                        this.showToast('❌ ' + (data.message || 'Failed'), 'error');
                     }
-                    this.showToast('✅ ' + (data.message || 'Successfully joined!'));
-                    if (data.data.redirect_url) {
-                        setTimeout(() => window.location.href = data.data.redirect_url, 1500);
-                    } else if (data.data.match_id) {
-                        setTimeout(() => window.location.href = this.basePath + '/game.php?match_id=' + data.data.match_id, 1500);
-                    }
-                } else {
-                    this.showToast('❌ ' + (data.message || 'Failed to join tournament'));
+                } catch (error) {
+                    this.showToast('Network error', 'error');
                 }
-            })
-            .catch((error) => {
-                console.error('Join tournament error:', error);
-                this.showToast('❌ Network error. Please try again.');
-            });
+            }
+
+            // ==========================================
+            // TOAST
+            // ==========================================
+            showToast(message, type = 'info') {
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toastMessage');
+                if (!toast || !toastMessage) return;
+
+                toastMessage.textContent = message;
+                toast.className = `toast-zupee ${type} show`;
+
+                if (this.toastTimer) clearTimeout(this.toastTimer);
+                this.toastTimer = setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }
         }
 
-        filterHistory(filter) {
-            document.querySelectorAll('.history-item').forEach(item => {
-                if (filter === 'all' || item.dataset.status === filter) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        }
-
-        showToast(message, duration = 3000) {
-            const toast = document.getElementById('toast');
-            const toastMessage = document.getElementById('toastMessage');
-
-            if (!toast || !toastMessage) return;
-
-            toastMessage.textContent = message;
-            toast.classList.remove('hidden');
-            toast.classList.add('visible');
-
-            if (this.toastTimeout) clearTimeout(this.toastTimeout);
-            this.toastTimeout = setTimeout(() => {
-                toast.classList.remove('visible');
-                toast.classList.add('hidden');
-            }, duration);
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        window.app = new App();
-    });
+        // ==========================================
+        // INITIALIZE
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            window.app = new ZupeeApp();
+            // Expose functions for inline onclick handlers
+            window.openAuthModal = (type) => window.app.openAuthModal(type);
+            window.navigateTo = (page) => window.app.navigateTo(page);
+            window.handleQuickPlay = (entry, id) => window.app.handleQuickPlay(entry, id);
+            window.handleJoinTournament = (entry, id) => window.app.handleJoinTournament(entry, id);
+        });
     </script>
 </body>
 </html>
