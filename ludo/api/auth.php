@@ -173,6 +173,12 @@ function handleLogin(array $input): void
             jsonResponse(false, 'Account is deactivated. Please contact support.', [], 403);
         }
 
+        // BUG FIX: failed_login_attempts was incremented but NEVER checked.
+        // Enforce account lockout after MAX_LOGIN_ATTEMPTS failures.
+        if (intval($user['failed_login_attempts']) >= MAX_LOGIN_ATTEMPTS) {
+            jsonResponse(false, 'Account temporarily locked due to too many failed attempts. Please contact support.', [], 403);
+        }
+
         if (!password_verify($password, $user['password_hash'])) {
             // Increment failed attempts
             $stmt = $conn->prepare("
@@ -181,7 +187,8 @@ function handleLogin(array $input): void
                 WHERE id = :user_id
             ");
             $stmt->execute([':user_id' => $user['id']]);
-            jsonResponse(false, 'Invalid credentials', [], 401);
+            $remaining = MAX_LOGIN_ATTEMPTS - intval($user['failed_login_attempts']) - 1;
+            jsonResponse(false, 'Invalid credentials' . ($remaining > 0 ? ". {$remaining} attempt(s) remaining." : '. Account will be locked.'), [], 401);
         }
 
         // Reset failed attempts

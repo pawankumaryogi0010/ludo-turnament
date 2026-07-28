@@ -16,11 +16,19 @@ const mysql = require('mysql2/promise');
 // CONFIGURATION
 // ==============================================
 const PORT = process.env.PORT || 3000;
+
+// BUG FIX: Use environment variables instead of hardcoded credentials.
+// Previous code had wrong DB name/user/password not matching .env file.
+// BUG FIX: Use createPool (below) for resilience — single createConnection
+// breaks permanently if the connection drops.
 const DB_CONFIG = {
-    host: 'localhost',
-    user: 'ludo_user',
-    password: 'Secure@Ludo2026#!',
-    database: 'ludo_tournament_db'
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASS || '',
+    database: process.env.DB_NAME || 'ludo_tournament',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 };
 
 // ==============================================
@@ -48,9 +56,12 @@ let db;
 
 async function connectDatabase() {
     try {
-        db = await mysql.createConnection(DB_CONFIG);
-        console.log('✅ Database connected');
+        // BUG FIX: Use createPool instead of createConnection so a dropped
+        // connection doesn't crash the server permanently.
+        db = await mysql.createPool(DB_CONFIG);
+        console.log('✅ Database pool created');
         
+        // BUG FIX: pool.execute instead of connection.execute
         await db.execute(`
             CREATE TABLE IF NOT EXISTS websocket_sessions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -701,6 +712,7 @@ process.on('SIGINT', async () => {
         io.to(code).emit('server_shutdown', { message: 'Server is shutting down' });
     }
     if (db) {
+        // BUG FIX: pool uses .end() — same API so this is correct
         await db.end();
     }
     server.close(() => {

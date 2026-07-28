@@ -419,10 +419,13 @@ function handleMoveToken(int $userId, array $input): void
                 ':match_id' => $matchId
             ]);
 
-            // Process settlement
-            processSettlement($winnerId, $matchId, floatval($match['prize_pool']));
-
+            // BUG FIX: Commit the outer transaction BEFORE calling processSettlement.
+            // processSettlement opens its own beginTransaction() — calling it while an
+            // active transaction is open causes a nested-transaction error with PDO/MySQL.
             $db->commit();
+
+            // Process settlement (runs in its own transaction)
+            processSettlement($winnerId, $matchId, floatval($match['prize_pool']));
 
             jsonResponse(true, 'Game completed! Winner declared by server.', [
                 'match_id' => $matchId,

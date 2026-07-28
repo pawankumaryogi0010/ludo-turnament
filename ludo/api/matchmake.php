@@ -119,11 +119,12 @@ try {
     $currentBalance = floatval($user['wallet_balance']);
     if ($currentBalance < $entryFee) {
         $db->rollback();
-        jsonResponse(false, 'Insufficient wallet balance', [], 400, [
+        // BUG FIX: jsonResponse() only takes 4 args; extra data merged into $data array
+        jsonResponse(false, 'Insufficient wallet balance', [
             'balance' => $currentBalance,
             'required' => $entryFee,
             'shortfall' => round($entryFee - $currentBalance, 2)
-        ]);
+        ], 400);
     }
     
     // ==============================================
@@ -142,11 +143,12 @@ try {
     
     if ($existingMatch) {
         $db->rollback();
-        jsonResponse(false, 'You are already in an active match', [], 409, [
+        // BUG FIX: jsonResponse() only accepts 4 args; extra data merged into $data
+        jsonResponse(false, 'You are already in an active match', [
             'match_id' => $existingMatch['id'],
             'room_code' => $existingMatch['room_code'],
             'status' => $existingMatch['status']
-        ]);
+        ], 409);
     }
     
     // ==============================================
@@ -301,11 +303,10 @@ try {
         
         if ($stmt->rowCount() === 0) {
             // Race condition - match was taken
+            // BUG FIX: Do NOT call refundUser here — the $db->rollback() below will
+            // already undo the wallet deduction and transaction record, so calling
+            // refundUser would double-credit the user (or try to refund a non-existent debit).
             $db->rollback();
-            
-            // Refund the user
-            refundUser($db, $conn, $userId, $entryFee, $transactionId, $orderId);
-            
             jsonResponse(false, 'Match was already taken. Please try again.', [], 409);
         }
         
@@ -489,6 +490,8 @@ function refundUser($db, $conn, $userId, $amount, $transactionId, $orderId) {
         ]);
         
         // Record refund transaction
+        // BUG FIX: MySQL does NOT use || for string concatenation (that's Oracle/PostgreSQL).
+        // Use CONCAT() instead.
         $stmt = $conn->prepare("
             INSERT INTO transactions (
                 user_id, 
@@ -507,8 +510,8 @@ function refundUser($db, $conn, $userId, $amount, $transactionId, $orderId) {
                 :amount,
                 'credit',
                 'refund',
-                'Matchmaking refund for order: ' || :order_id,
-                :order_id || '-REFUND',
+                CONCAT('Matchmaking refund for order: ', :order_id),
+                CONCAT(:order_id, '-REFUND'),
                 'success',
                 wallet_balance - :amount,
                 wallet_balance,

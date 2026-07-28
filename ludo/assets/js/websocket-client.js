@@ -69,6 +69,14 @@ class LudoWebSocketClient {
                     }
                 });
 
+                // BUG FIX: connect_error fires on every failed attempt, so reject()
+                // was called multiple times once maxReconnectAttempts was reached,
+                // which violates the Promise contract. Guard with a settled flag.
+                let settled = false;
+                const safeReject = (err) => { if (!settled) { settled = true; reject(err); } };
+                // Also mark settled on connect so we stop trying to reject after success.
+                this.socket.once('connect', () => { settled = true; });
+
                 this.socket.on('connect_error', (error) => {
                     console.error('❌ WebSocket connection error:', error);
                     if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -79,7 +87,7 @@ class LudoWebSocketClient {
                             }
                         }, this.reconnectDelay * this.reconnectAttempts);
                     } else {
-                        reject(error);
+                        safeReject(error);
                     }
                 });
 

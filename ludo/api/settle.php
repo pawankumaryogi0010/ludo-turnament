@@ -129,18 +129,20 @@ try {
     // ==============================================
     if ($match['status'] === 'completed') {
         $db->rollback();
-        jsonResponse(false, 'Match already settled', [], 409, [
+        // BUG FIX: jsonResponse() only accepts 4 parameters — extra data merged into $data
+        jsonResponse(false, 'Match already settled', [
             'match_id' => $matchId,
             'winner_id' => $match['winner_id'],
             'winning_amount' => floatval($match['winning_amount'])
-        ]);
+        ], 409);
     }
     
     if ($match['status'] !== 'playing' && $match['status'] !== 'ready') {
         $db->rollback();
-        jsonResponse(false, 'Match is not in playable state', [], 400, [
+        // BUG FIX: jsonResponse() only accepts 4 parameters — extra data merged into $data
+        jsonResponse(false, 'Match is not in playable state', [
             'current_status' => $match['status']
-        ]);
+        ], 400);
     }
     
     // ==============================================
@@ -248,6 +250,20 @@ try {
     if ($stmt->rowCount() === 0) {
         $db->rollback();
         jsonResponse(false, 'Failed to credit winner wallet', [], 500);
+    }
+
+    // BUG FIX: Loser's total_matches_played was never updated.
+    // Update the loser's match count (only matches_played, not matches_won).
+    $loserIds = array_filter($playerIds, fn($id) => $id !== $winnerId);
+    if (!empty($loserIds)) {
+        $loserPlaceholders = implode(',', array_fill(0, count($loserIds), '?'));
+        $loserStmt = $conn->prepare("
+            UPDATE users
+            SET total_matches_played = total_matches_played + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id IN ({$loserPlaceholders})
+        ");
+        $loserStmt->execute(array_values($loserIds));
     }
     
     // ==============================================

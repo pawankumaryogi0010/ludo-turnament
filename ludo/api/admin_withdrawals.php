@@ -301,10 +301,9 @@ function handleApprove() {
             jsonResponse(false, 'User not found or inactive', [], 400);
         }
         
-        if ($user['wallet_balance'] < $withdrawal['amount']) {
-            $db->rollback();
-            jsonResponse(false, 'Insufficient balance in user wallet', [], 400);
-        }
+        // BUG FIX: wallet.php already deducted the balance at withdrawal REQUEST time,
+        // so this check would ALWAYS fail for a valid withdrawal. Remove it.
+        // (The balance is already ≤ original amount; approve just processes payout.)
         
         // Check KYC
         if ($user['kyc_status'] !== 'verified') {
@@ -334,11 +333,11 @@ function handleApprove() {
             ':id' => $id
         ]);
         
-        // Deduct from user wallet
+        // BUG FIX: wallet.php already deducted the balance at withdrawal REQUEST time.
+        // Deducting again here causes a double-deduction. Only update stats, not balance.
         $stmt = $conn->prepare("
             UPDATE users 
             SET 
-                wallet_balance = wallet_balance - :amount,
                 total_withdrawn = total_withdrawn + :amount,
                 last_withdrawal_date = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -684,12 +683,15 @@ function handleComplete() {
             ':id' => $id
         ]);
         
-        // Update transaction status
+        // BUG FIX: LIKE CONCAT('WITHDRAW-%', :id, '%') matches any ID that contains
+        // this number as a substring (e.g. id=1 matches ids 10, 11, 21, …).
+        // The OR description LIKE is even broader. Fix: use JSON metadata exact match.
         $stmt = $conn->prepare("
             UPDATE transactions 
             SET status = 'success', processed_at = CURRENT_TIMESTAMP 
-            WHERE order_id LIKE CONCAT('WITHDRAW-%', :id, '%')
-            OR description LIKE CONCAT('%', :id, '%')
+            WHERE JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.withdrawal_id')) = :id
+            AND type = 'debit'
+            AND source = 'withdrawal'
         ");
         $stmt->execute([':id' => $id]);
         

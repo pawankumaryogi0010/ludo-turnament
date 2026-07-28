@@ -105,7 +105,9 @@ if (isset($_POST['add_tournament'])) {
         $platformFeeAmount = $totalPool * ($platformFeePercent / 100);
         $prizePool = $totalPool - $platformFeeAmount;
         
-        $tournamentCode = 'T' . strtoupper(substr(uniqid(), -8) . bin2hex(random_bytes(2)));
+        // BUG FIX: uniqid() is time-based and predictable; replaced entirely with
+        // cryptographically secure random bytes.
+        $tournamentCode = 'T' . strtoupper(bin2hex(random_bytes(6)));
         
         $db->beginTransaction();
         

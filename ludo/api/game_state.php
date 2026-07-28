@@ -65,10 +65,9 @@ if (!$currentUserId) {
     jsonResponse(false, 'Invalid user session', [], 401);
 }
 
-// If userId not provided in request, use authenticated user
-if ($userId <= 0) {
-    $userId = $currentUserId;
-}
+// BUG FIX: $userId was taken from the request, so an attacker who knew another
+// player's user_id could spy on their game state. Always enforce $currentUserId.
+$userId = $currentUserId;
 
 // Validate that user is part of this match
 $isAuthorized = false;

@@ -296,16 +296,28 @@ function getStats() {
     ");
     $stats['new_users_today'] = intval($stmt->fetchColumn());
     
-    // Growth percentages (compared to last 30 days)
+    // BUG FIX: Previous code compared today's new user count vs last-month's TOTAL
+    // (60-30 days ago) — dividing a single day by a full month always produces
+    // an extreme negative. Fix: compare this month's new users vs last month's.
+    $stmt = $conn->query("
+        SELECT COUNT(*) as this_month 
+        FROM users 
+        WHERE is_admin = 0 
+        AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+    ");
+    $thisMonthUsers = intval($stmt->fetchColumn());
+
     $stmt = $conn->query("
         SELECT COUNT(*) as last_month 
         FROM users 
         WHERE is_admin = 0 
-        AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
-        AND created_at < DATE_SUB(NOW(), INTERVAL 60 DAY)
+        AND created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-01')
+        AND created_at  < DATE_FORMAT(NOW(), '%Y-%m-01')
     ");
     $lastMonthUsers = intval($stmt->fetchColumn());
-    $stats['user_growth'] = $lastMonthUsers > 0 ? round((($stats['new_users_today'] - $lastMonthUsers) / $lastMonthUsers) * 100, 1) : 0;
+    $stats['user_growth'] = $lastMonthUsers > 0
+        ? round((($thisMonthUsers - $lastMonthUsers) / $lastMonthUsers) * 100, 1)
+        : ($thisMonthUsers > 0 ? 100.0 : 0.0);
     
     return $stats;
 }

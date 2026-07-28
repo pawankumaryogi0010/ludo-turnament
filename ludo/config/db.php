@@ -12,7 +12,8 @@ declare(strict_types=1);
 // ======================================================
 // ENVIRONMENT CONFIGURATION
 // ======================================================
-$envFile = __DIR__ . '/.env';
+// BUG FIX: .env lives in ludo/ (parent of config/), not in ludo/config/
+$envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
     $env = parse_ini_file($envFile);
 } else {
@@ -39,6 +40,12 @@ define('CSRF_TOKEN_LENGTH', 32);
 define('PLATFORM_FEE', (float)($env['PLATFORM_FEE'] ?? 15));
 define('TDS_RATE', (float)($env['TDS_RATE'] ?? 30));
 define('TDS_THRESHOLD', (float)($env['TDS_THRESHOLD'] ?? 10000));
+
+// BUG FIX: Cashfree constants defined here so all files can use them
+// cashfree.php was trying $_ENV which doesn't contain parse_ini_file values
+define('CASHFREE_APP_ID_CFG', $env['CASHFREE_APP_ID'] ?? '');
+define('CASHFREE_SECRET_KEY_CFG', $env['CASHFREE_SECRET_KEY'] ?? '');
+define('CASHFREE_ENV_CFG', $env['CASHFREE_ENV'] ?? 'test');
 
 date_default_timezone_set(TIMEZONE);
 

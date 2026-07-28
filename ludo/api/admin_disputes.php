@@ -770,25 +770,88 @@ function handleDeclareWinner() {
             jsonResponse(false, 'Match already completed', [], 400);
         }
         
+        // Verify the declared winner is actually in this match
+        if (!in_array($winnerId, [$match['player1_id'], $match['player2_id']])) {
+            $db->rollback();
+            jsonResponse(false, 'Declared winner is not a player in this match', [], 400);
+        }
+
+        // Get winner info for prize crediting
+        $stmt = $conn->prepare("SELECT id, username, wallet_balance FROM users WHERE id = :winner_id FOR UPDATE");
+        $stmt->execute([':winner_id' => $winnerId]);
+        $winner = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$winner) {
+            $db->rollback();
+            jsonResponse(false, 'Winner user not found', [], 404);
+        }
+
+        $prizePool = floatval($match['prize_pool']);
+
+        // BUG FIX: Original code only updated match status; never credited the
+        // winner's wallet with the prize pool. Fix: credit before committing.
+        $stmt = $conn->prepare("
+            UPDATE users
+            SET wallet_balance = wallet_balance + :prize,
+                total_earnings  = total_earnings  + :prize,
+                total_matches_won = total_matches_won + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :winner_id
+        ");
+        $stmt->execute([':prize' => $prizePool, ':winner_id' => $winnerId]);
+
+        // Record prize transaction
+        $orderId = 'ADMIN-WIN-' . strtoupper(bin2hex(random_bytes(6)));
+        $stmt = $conn->prepare("
+            INSERT INTO transactions (
+                user_id, amount, type, source, description,
+                order_id, status, balance_before, balance_after,
+                metadata, created_at
+            ) VALUES (
+                :user_id, :amount, 'credit', 'prize',
+                :description,
+                :order_id, 'success',
+                :balance_before, :balance_after,
+                :metadata, CURRENT_TIMESTAMP
+            )
+        ");
+        $stmt->execute([
+            ':user_id'       => $winnerId,
+            ':amount'        => $prizePool,
+            ':description'   => "Prize for admin-declared win in match #{$matchId}",
+            ':order_id'      => $orderId,
+            ':balance_before'=> floatval($winner['wallet_balance']),
+            ':balance_after' => floatval($winner['wallet_balance']) + $prizePool,
+            ':metadata'      => json_encode([
+                'match_id'   => $matchId,
+                'admin_id'   => $_SESSION['admin_id'],
+                'action'     => 'admin_declare_winner'
+            ])
+        ]);
+
         // Update match
         $stmt = $conn->prepare("
             UPDATE matches 
             SET 
                 winner_id = :winner_id,
+                winner_name = :winner_name,
+                winning_amount = :prize_pool,
                 status = 'completed',
                 completed_at = CURRENT_TIMESTAMP
             WHERE id = :match_id
         ");
         $stmt->execute([
-            ':winner_id' => $winnerId,
-            ':match_id' => $matchId
+            ':winner_id'   => $winnerId,
+            ':winner_name' => $winner['username'],
+            ':prize_pool'  => $prizePool,
+            ':match_id'    => $matchId
         ]);
         
         $db->commit();
         
-        jsonResponse(true, 'Winner declared successfully', [
-            'match_id' => $matchId,
-            'winner_id' => $winnerId
+        jsonResponse(true, 'Winner declared and prize credited successfully', [
+            'match_id'     => $matchId,
+            'winner_id'    => $winnerId,
+            'prize_credited' => $prizePool
         ]);
         
     } catch (PDOException $e) {

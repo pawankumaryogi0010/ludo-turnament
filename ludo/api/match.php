@@ -123,11 +123,12 @@ function handleJoinMatch() {
         // Check balance
         if ($user['wallet_balance'] < $entryFee) {
             $db->rollback();
-            jsonResponse(false, 'Insufficient wallet balance', [], 400, [
+            // BUG FIX: jsonResponse() only accepts 4 args. Merge extra data into $data.
+            jsonResponse(false, 'Insufficient wallet balance', [
                 'balance' => floatval($user['wallet_balance']),
                 'required' => $entryFee,
                 'shortfall' => round($entryFee - $user['wallet_balance'], 2)
-            ]);
+            ], 400);
         }
         
         // Get tournament details
@@ -209,8 +210,17 @@ function handleJoinMatch() {
         if ($existingMatch) {
             // Join existing match
             $matchId = $existingMatch['id'];
-            $firstTurn = rand(1, 2) === 1 ? 1 : 2;
-            
+
+            // BUG FIX #1: current_turn_id is a user_id (FK → users.id), NOT a player
+            // number. Previous code set it to 1 or 2 (player numbers), which pointed
+            // to the wrong users entirely.
+            $stmt = $conn->prepare("SELECT player1_id, room_code FROM matches WHERE id = :mid");
+            $stmt->execute([':mid' => $matchId]);
+            $existingMatchRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            $player1UserId = intval($existingMatchRow['player1_id']);
+            $existingRoomCode = $existingMatchRow['room_code'] ?? $roomCode;
+            $firstTurn = rand(0, 1) === 0 ? $player1UserId : $userId;
+
             $stmt = $conn->prepare("
                 UPDATE matches 
                 SET 
@@ -233,7 +243,9 @@ function handleJoinMatch() {
             
             jsonResponse(true, 'Match found!', [
                 'match_id' => $matchId,
-                'room_code' => $roomCode,
+                // BUG FIX #2: Was returning a newly-generated $roomCode instead of the
+                // existing match's room_code, causing the joining player to use a wrong room.
+                'room_code' => $existingRoomCode,
                 'status' => 'ready',
                 'entry_fee' => $entryFee,
                 'prize_pool' => $prizePool,

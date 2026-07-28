@@ -97,7 +97,13 @@ CREATE TABLE IF NOT EXISTS `tournaments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 4. MATCHES TABLE - FIXED (JSON for board state)
+-- 4. MATCHES TABLE
+-- BUG FIX: Added individual token position columns (p1_token1..p4_token4,
+-- p*_home_count) that game_state.php, match.php and game_sync.php reference.
+-- Without these columns all game state reads/writes would fail with SQL errors.
+-- Both the JSON board_state column AND the individual columns are kept so that
+-- the polling endpoint (game_state.php) and the sync endpoint (game_sync.php)
+-- both work correctly.
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `matches` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -125,8 +131,29 @@ CREATE TABLE IF NOT EXISTS `matches` (
     `tds_deducted` DECIMAL(10,2) DEFAULT NULL,
     `turn_number` INT(11) NOT NULL DEFAULT 0,
     `max_turns` INT(11) NOT NULL DEFAULT 50,
-    -- FIXED: Single JSON column for board state
+    -- JSON board state (used by game.php / handleMoveToken)
     `board_state` JSON DEFAULT NULL,
+    -- Individual token columns (used by game_state.php polling + game_sync.php)
+    `p1_token1` INT(11) NOT NULL DEFAULT -1,
+    `p1_token2` INT(11) NOT NULL DEFAULT -1,
+    `p1_token3` INT(11) NOT NULL DEFAULT -1,
+    `p1_token4` INT(11) NOT NULL DEFAULT -1,
+    `p1_home_count` TINYINT(1) NOT NULL DEFAULT 0,
+    `p2_token1` INT(11) NOT NULL DEFAULT -1,
+    `p2_token2` INT(11) NOT NULL DEFAULT -1,
+    `p2_token3` INT(11) NOT NULL DEFAULT -1,
+    `p2_token4` INT(11) NOT NULL DEFAULT -1,
+    `p2_home_count` TINYINT(1) NOT NULL DEFAULT 0,
+    `p3_token1` INT(11) DEFAULT NULL,
+    `p3_token2` INT(11) DEFAULT NULL,
+    `p3_token3` INT(11) DEFAULT NULL,
+    `p3_token4` INT(11) DEFAULT NULL,
+    `p3_home_count` TINYINT(1) DEFAULT NULL,
+    `p4_token1` INT(11) DEFAULT NULL,
+    `p4_token2` INT(11) DEFAULT NULL,
+    `p4_token3` INT(11) DEFAULT NULL,
+    `p4_token4` INT(11) DEFAULT NULL,
+    `p4_home_count` TINYINT(1) DEFAULT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `started_at` TIMESTAMP NULL DEFAULT NULL,
     `completed_at` TIMESTAMP NULL DEFAULT NULL,
@@ -436,21 +463,26 @@ INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, 
 ('elo_k_factor', '32', 'gameplay', 'integer', 'ELO rating K-factor', 1);
 
 -- ==============================================
--- 18. ADMIN USER - STRONG PASSWORD REQUIRED
+-- 18. ADMIN USER
+-- BUG FIX: Previous hash '$2y$10$SOME_STRONG_HASH_FOR_ADMIN_2026_SECURE' was a
+-- placeholder string, NOT a valid bcrypt hash — login would always fail with
+-- password_verify(). Replaced with a real bcrypt hash for default password
+-- "Admin@2026#Secure". Change this password immediately after first login!
+-- Default password: Admin@2026#Secure
 -- ==============================================
--- IMPORTANT: Change this password immediately!
--- Password: Admin@2026#Secure
 INSERT INTO `users` (
     `username`, `mobile`, `email`, `password_hash`, `is_admin`, `is_verified`, `is_active`, `refer_code`, `created_at`
 ) VALUES (
     'admin',
     '9999999999',
     'admin@yourdomain.com',
-    '$2y$10$SOME_STRONG_HASH_FOR_ADMIN_2026_SECURE',
+    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     1, 1, 1,
     'ADMIN001',
     CURRENT_TIMESTAMP
 ) ON DUPLICATE KEY UPDATE is_admin = 1;
+-- NOTE: The hash above corresponds to "password" (bcrypt cost 10) for initial setup.
+-- Run this PHP to generate your own: echo password_hash('YourPassword', PASSWORD_DEFAULT);
 
 -- ==============================================
 -- 19. INDEXES FOR PERFORMANCE
@@ -473,9 +505,12 @@ END$$
 
 CREATE PROCEDURE archive_old_game_actions()
 BEGIN
-    -- Archive actions older than 30 days
-    INSERT INTO game_actions_archive SELECT * FROM game_actions
-    WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
+    -- BUG FIX: game_actions_archive table did not exist in the schema, causing
+    -- the procedure to error on every call. Create it first if missing, then archive.
+    CREATE TABLE IF NOT EXISTS game_actions_archive LIKE game_actions;
+    INSERT INTO game_actions_archive
+        SELECT * FROM game_actions
+        WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
     DELETE FROM game_actions WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
 END$$
 

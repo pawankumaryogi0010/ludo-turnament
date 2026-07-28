@@ -74,6 +74,11 @@ function handlePoll() {
         $db = Database::getInstance();
         $conn = $db->getConnection();
         
+        // BUG FIX: PHP holds a file-based session lock for the entire request
+        // lifetime. A long-poll here (up to 30s) blocks ALL concurrent requests
+        // from the same user. Release the lock before entering the loop.
+        session_write_close();
+
         // Long-polling: Wait for changes
         $startTime = time();
         $updates = [];

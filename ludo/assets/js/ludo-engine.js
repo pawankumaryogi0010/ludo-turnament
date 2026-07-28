@@ -141,20 +141,44 @@ class LudoEngine {
     handleCanvasClick(x, y) {
         if (this.gameState.isGameOver) return;
         if (this.gameState.currentTurn !== 1) return;
-        if (!this.gameState.canRoll || this.gameState.hasRolled) return;
-        
-        // Check if click is on a token
+
+        // BUG FIX: Previous code had `if (!canRoll || hasRolled) return` which
+        // blocked token moves — after rolling (hasRolled=true), clicking a token
+        // would exit immediately before reaching the move logic.
+        // Split into two phases: (1) after roll → try to move a token,
+        //                        (2) before roll → roll the dice.
+        if (this.gameState.hasRolled) {
+            // Phase 1: dice already rolled — click on a token to move it
+            const player = this.players[1];
+            for (const token of player.tokens) {
+                if (!token.isActive && !token.isHome) continue;
+                const dx = x - token.x;
+                const dy = y - token.y;
+                if (Math.sqrt(dx * dx + dy * dy) < 15) {
+                    this.moveToken(1, token.id);
+                    return;
+                }
+            }
+            // No token clicked — do nothing (wait for user to pick a token)
+            return;
+        }
+
+        if (!this.gameState.canRoll) return;
+
+        // Phase 2: dice not rolled yet — check if a home token was clicked
+        // (e.g. player wants to bring a token out). Otherwise roll.
         const player = this.players[1];
         for (const token of player.tokens) {
             const dx = x - token.x;
             const dy = y - token.y;
-            if (Math.sqrt(dx*dx + dy*dy) < 15) {
-                this.moveToken(1, token.id);
+            if (Math.sqrt(dx * dx + dy * dy) < 15) {
+                // Clicking a home token still rolls first; moveToken will handle it
+                this.rollDice();
                 return;
             }
         }
-        
-        // If clicked on board, roll dice
+
+        // Clicked on empty board — roll dice
         this.rollDice();
     }
 
@@ -560,12 +584,14 @@ class LudoEngine {
     }
 
     setState(state) {
-        if (state.status) this.gameState.status = state.status;
-        if (state.currentTurn) this.gameState.currentTurn = state.currentTurn;
-        if (state.diceValue) this.gameState.diceValue = state.diceValue;
-        if (state.turnNumber) this.gameState.turnNumber = state.turnNumber;
-        if (state.isGameOver) this.gameState.isGameOver = state.isGameOver;
-        if (state.winner) this.gameState.winner = state.winner;
+        // BUG FIX: `if (state.diceValue)` skips value 0 because 0 is falsy.
+        // Use `!== undefined` so every explicitly provided field is applied.
+        if (state.status    !== undefined) this.gameState.status      = state.status;
+        if (state.currentTurn !== undefined) this.gameState.currentTurn = state.currentTurn;
+        if (state.diceValue  !== undefined) this.gameState.diceValue   = state.diceValue;
+        if (state.turnNumber !== undefined) this.gameState.turnNumber  = state.turnNumber;
+        if (state.isGameOver !== undefined) this.gameState.isGameOver  = state.isGameOver;
+        if (state.winner     !== undefined) this.gameState.winner      = state.winner;
         
         if (state.player1) {
             this.players[1].homeCount = state.player1.homeCount || 0;

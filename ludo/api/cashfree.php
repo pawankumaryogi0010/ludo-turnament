@@ -24,15 +24,15 @@ header('X-XSS-Protection: 1; mode=block');
 // ==============================================
 // CASHFREE CONFIGURATION - ✅ FIX: Load from env safely
 // ==============================================
-$cashfreeAppId = $_ENV['CASHFREE_APP_ID'] ?? getenv('CASHFREE_APP_ID') ?? '';
-$cashfreeSecretKey = $_ENV['CASHFREE_SECRET_KEY'] ?? getenv('CASHFREE_SECRET_KEY') ?? '';
-$cashfreeEnvironment = $_ENV['CASHFREE_ENV'] ?? getenv('CASHFREE_ENV') ?? 'test';
+// BUG FIX: The previous code used $_ENV / getenv() to read Cashfree keys, but
+// config/db.php loads the .env file via parse_ini_file() — those values are NOT
+// automatically placed into $_ENV or getenv(). They are now exposed as the
+// CASHFREE_APP_ID_CFG / CASHFREE_SECRET_KEY_CFG / CASHFREE_ENV_CFG constants
+// defined in config/db.php after the .env parse. Use those constants here.
+define('CASHFREE_APP_ID', defined('CASHFREE_APP_ID_CFG') ? CASHFREE_APP_ID_CFG : (getenv('CASHFREE_APP_ID') ?: ''));
+define('CASHFREE_SECRET_KEY', defined('CASHFREE_SECRET_KEY_CFG') ? CASHFREE_SECRET_KEY_CFG : (getenv('CASHFREE_SECRET_KEY') ?: ''));
+define('CASHFREE_ENVIRONMENT', defined('CASHFREE_ENV_CFG') ? CASHFREE_ENV_CFG : (getenv('CASHFREE_ENV') ?: 'test'));
 
-define('CASHFREE_APP_ID', $cashfreeAppId);
-define('CASHFREE_SECRET_KEY', $cashfreeSecretKey);
-define('CASHFREE_ENVIRONMENT', $cashfreeEnvironment);
-
-// ✅ FIX: Log missing keys but don't crash
 if (empty(CASHFREE_APP_ID) || empty(CASHFREE_SECRET_KEY)) {
     error_log('[Cashfree] WARNING: API keys not configured in environment');
     // Allow webhook verification to work, but payment actions will fail safely
@@ -428,13 +428,15 @@ function handlePaymentSuccess($data) {
         $db->beginTransaction();
         
         try {
-            // ✅ FIX: Find transaction with row lock
+            // BUG FIX: Missing FOR UPDATE — without it two concurrent webhook deliveries
+            // can both read status='pending' and both credit the wallet (double-payment).
             $stmt = $conn->prepare("
                 SELECT 
                     id, user_id, amount, status, balance_before, metadata
                 FROM transactions 
                 WHERE order_id = :order_id
                 LIMIT 1
+                FOR UPDATE
             ");
             $stmt->execute([':order_id' => $orderId]);
             $transaction = $stmt->fetch(PDO::FETCH_ASSOC);

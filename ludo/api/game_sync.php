@@ -67,9 +67,9 @@ function handleSaveState() {
         
         $db->beginTransaction();
         
-        // Verify user is in match
+        // BUG FIX: Fetch full match row (not just id) so we can validate current_turn below
         $stmt = $conn->prepare("
-            SELECT id FROM matches
+            SELECT id, player1_id, player2_id, status FROM matches
             WHERE id = :match_id
             AND (player1_id = :user_id OR player2_id = :user_id)
             FOR UPDATE
@@ -79,11 +79,23 @@ function handleSaveState() {
             ':user_id' => $userId
         ]);
         
-        if (!$stmt->fetch()) {
+        $match = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$match) {
             $db->rollback();
             jsonResponse(false, 'Not authorized for this match', [], 403);
         }
         
+        // BUG FIX: Client was allowed to set ANY status (including 'completed') with no
+        // server-side validation. Whitelist the allowed in-progress statuses only.
+        $allowedStatuses = ['playing', 'paused'];
+        $requestedStatus = $input['status'] ?? 'playing';
+        $safeStatus = in_array($requestedStatus, $allowedStatuses, true) ? $requestedStatus : 'playing';
+
+        // BUG FIX: Validate current_turn belongs to the match
+        $validTurns = [$match['player1_id'] ?? 0, $match['player2_id'] ?? 0];
+        $requestedTurn = intval($input['current_turn'] ?? 0);
+        $safeTurn = in_array($requestedTurn, $validTurns, true) ? $requestedTurn : ($validTurns[0] ?? 0);
+
         // Update match with game state
         $stmt = $conn->prepare("
             UPDATE matches
@@ -116,10 +128,10 @@ function handleSaveState() {
             ':p2_token3' => $input['p2_tokens'][2] ?? -1,
             ':p2_token4' => $input['p2_tokens'][3] ?? -1,
             ':p2_home_count' => $input['p2_home_count'] ?? 0,
-            ':current_turn' => $input['current_turn'] ?? 1,
+            ':current_turn' => $safeTurn,
             ':dice_value' => $input['dice_value'] ?? 0,
             ':turn_number' => $input['turn_number'] ?? 0,
-            ':status' => $input['status'] ?? 'playing',
+            ':status' => $safeStatus,
             ':match_id' => $matchId
         ]);
         
