@@ -711,7 +711,7 @@ $USE_WEBSOCKET = false; // Use polling for shared hosting
             function pollForUpdates() {
                 if (!matchId || isGameOver) return;
 
-                fetch(basePath + '/api/v1/game?action=get_state&match_id=' + matchId, {
+                fetch(basePath + '/api/game?action=get_state&match_id=' + matchId, {
                     credentials: 'same-origin'
                 })
                 .then(res => res.json())
