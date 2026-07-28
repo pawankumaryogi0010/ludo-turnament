@@ -1,23 +1,38 @@
 /**
- * auth-helper.js - Complete Authentication Helper
- * Version: 2.0.0 - Fully Fixed
- * Handles registration, login, logout with proper error handling
+ * ======================================================
+ * AUTH-HELPER.JS - Complete Authentication Helper (FIXED)
+ * Ludo Tournament Platform - Auth Module
+ * Version: 3.0.0 - API PATHS FIXED + ERROR HANDLING
+ * ======================================================
  */
 
 const AuthHelper = (() => {
-    // ✅ FIXED: Dynamic API base path
-    const API_BASE = window.location.origin + '/ludo/api/auth.php';
+    // FIXED: Dynamic API base path - detect from current location
+    const getApiBase = () => {
+        const path = window.location.pathname;
+        // Remove filename, get directory
+        const dir = path.substring(0, path.lastIndexOf('/'));
+        return window.location.origin + dir + '/api/auth.php';
+    };
+
+    const API_BASE = getApiBase();
     
     let _csrfToken = '';
     let _isInitialized = false;
 
     /**
-     * ✅ FIXED: Get CSRF token with fallback
-     * If CSRF endpoint doesn't exist, generate local token
+     * FIXED: Get CSRF token with retry and fallback
      */
     const getCsrfToken = async () => {
-        // If we already have a token, return it
-        if (_csrfToken) {
+        // Return cached token if available
+        if (_csrfToken && _csrfToken.length > 10) {
+            return _csrfToken;
+        }
+
+        // Check localStorage for cached token
+        const cachedToken = localStorage.getItem('csrf_token');
+        if (cachedToken && cachedToken.length > 10) {
+            _csrfToken = cachedToken;
             return _csrfToken;
         }
 
@@ -31,64 +46,56 @@ const AuthHelper = (() => {
                 }
             });
 
-            // ✅ Check if response is valid JSON
             const text = await response.text();
             
-            // If response is not JSON or 404, generate fallback token
-            if (!response.ok || !text.startsWith('{')) {
-                console.warn('[Auth] CSRF endpoint not found, using fallback token');
-                _csrfToken = generateFallbackToken();
-                return _csrfToken;
+            // FIXED: Better JSON detection
+            if (text.trim().startsWith('{')) {
+                const data = JSON.parse(text);
+                if (data.success && data.data && data.data.csrf_token) {
+                    _csrfToken = data.data.csrf_token;
+                    _isInitialized = true;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                    return _csrfToken;
+                }
             }
-
-            const data = JSON.parse(text);
             
-            if (data.success && data.data && data.data.csrf_token) {
-                _csrfToken = data.data.csrf_token;
-                _isInitialized = true;
-                return _csrfToken;
-            } else {
-                // API returned error, use fallback
-                console.warn('[Auth] CSRF fetch failed, using fallback token');
-                _csrfToken = generateFallbackToken();
-                return _csrfToken;
-            }
+            // Fallback: generate local token
+            console.warn('[Auth] CSRF endpoint unavailable, using fallback token');
+            _csrfToken = generateFallbackToken();
+            return _csrfToken;
+            
         } catch (error) {
             console.warn('[Auth] CSRF fetch error:', error.message);
-            // Generate fallback token
             _csrfToken = generateFallbackToken();
             return _csrfToken;
         }
     };
 
     /**
-     * ✅ Generate fallback CSRF token if API is not available
+     * Generate fallback CSRF token
      */
     const generateFallbackToken = () => {
-        return 'csrf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+        const token = 'csrf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15) + 
+                      '_' + Math.random().toString(36).substring(2, 10);
+        return token;
     };
 
     /**
-     * ✅ FIXED: Register with CSRF token and proper error handling
+     * FIXED: Register with proper validation
      */
     const register = async ({ username, mobile, password, email = '', referralCode = '' }) => {
         try {
             // Validate inputs
-            if (!username || !mobile || !password) {
-                return {
-                    success: false,
-                    message: 'Username, mobile and password are required'
-                };
+            if (!username || username.length < 3) {
+                return { success: false, message: 'Username must be at least 3 characters' };
+            }
+            if (!mobile || !/^[0-9]{10}$/.test(mobile)) {
+                return { success: false, message: 'Please enter a valid 10-digit mobile number' };
+            }
+            if (!password || password.length < 6) {
+                return { success: false, message: 'Password must be at least 6 characters' };
             }
 
-            if (password.length < 6) {
-                return {
-                    success: false,
-                    message: 'Password must be at least 6 characters'
-                };
-            }
-
-            // Get CSRF token (with fallback)
             const csrf = await getCsrfToken();
 
             const response = await fetch(`${API_BASE}?action=register`, {
@@ -109,51 +116,48 @@ const AuthHelper = (() => {
                 })
             });
 
-            // ✅ Handle non-JSON responses (like 404 HTML)
             const text = await response.text();
             
-            if (!text.startsWith('{')) {
+            // FIXED: Handle non-JSON responses gracefully
+            if (!text.trim().startsWith('{')) {
                 console.error('[Auth] Non-JSON response:', text.substring(0, 200));
                 return {
                     success: false,
-                    message: 'Server error. Please check API path.',
-                    debug: text.substring(0, 100)
+                    message: 'Server error. Please try again later.'
                 };
             }
 
             const data = JSON.parse(text);
             
-            if (!response.ok) {
-                return {
-                    success: false,
-                    message: data.message || `HTTP ${response.status}: ${response.statusText}`
-                };
+            // FIXED: Store user data on success
+            if (data.success && data.data && data.data.user) {
+                storeUserData(data.data.user);
+                if (data.data.csrf_token) {
+                    _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                }
             }
 
             return data;
+            
         } catch (error) {
             console.error('[Auth] Register error:', error);
             return {
                 success: false,
-                message: error.message || 'Registration failed. Please try again.'
+                message: 'Network error. Please check your connection and try again.'
             };
         }
     };
 
     /**
-     * ✅ FIXED: Login with username/mobile/email support
+     * FIXED: Login with username/mobile/email support
      */
     const login = async ({ username, password }) => {
         try {
-            // Validate inputs
             if (!username || !password) {
-                return {
-                    success: false,
-                    message: 'Username/Mobile/Email and password are required'
-                };
+                return { success: false, message: 'Username and password are required' };
             }
 
-            // Get CSRF token (with fallback)
             const csrf = await getCsrfToken();
 
             const response = await fetch(`${API_BASE}?action=login`, {
@@ -171,92 +175,89 @@ const AuthHelper = (() => {
                 })
             });
 
-            // ✅ Handle non-JSON responses
             const text = await response.text();
             
-            if (!text.startsWith('{')) {
+            if (!text.trim().startsWith('{')) {
                 console.error('[Auth] Non-JSON response:', text.substring(0, 200));
                 return {
                     success: false,
-                    message: 'Server error. Please check API path.',
-                    debug: text.substring(0, 100)
+                    message: 'Server error. Please try again later.'
                 };
             }
 
             const data = JSON.parse(text);
             
-            if (!response.ok) {
-                return {
-                    success: false,
-                    message: data.message || `HTTP ${response.status}: ${response.statusText}`
-                };
-            }
-
-            // ✅ Store user data on successful login
-            if (data.success && data.user) {
-                try {
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    localStorage.setItem('isLoggedIn', 'true');
-                    localStorage.setItem('userId', data.user.id);
-                } catch (e) {
-                    console.warn('[Auth] Could not save to localStorage:', e);
+            // FIXED: Store user data on success
+            if (data.success && data.data && data.data.user) {
+                storeUserData(data.data.user);
+                if (data.data.csrf_token) {
+                    _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
                 }
             }
 
             return data;
+            
         } catch (error) {
             console.error('[Auth] Login error:', error);
             return {
                 success: false,
-                message: error.message || 'Login failed. Please try again.'
+                message: 'Network error. Please check your connection and try again.'
             };
         }
     };
 
     /**
-     * ✅ FIXED: Check authentication status
+     * FIXED: Check authentication status
      */
     const checkAuth = async () => {
         try {
-            // First check localStorage
-            if (localStorage.getItem('isLoggedIn') === 'true') {
-                const user = localStorage.getItem('user');
-                if (user) {
+            // Check localStorage first
+            const storedUser = localStorage.getItem('user');
+            const isLoggedIn = localStorage.getItem('isLoggedIn');
+            
+            if (isLoggedIn === 'true' && storedUser) {
+                try {
+                    const user = JSON.parse(storedUser);
                     return {
                         success: true,
                         isLoggedIn: true,
-                        user: JSON.parse(user)
+                        user: user
                     };
+                } catch (e) {
+                    // Invalid stored data, clear it
+                    clearUserData();
                 }
             }
 
-            // Then check with server
+            // Verify with server
             const response = await fetch(`${API_BASE}?action=check`, {
                 method: 'GET',
                 credentials: 'include',
-                headers: {
-                    'Accept': 'application/json'
-                }
+                headers: { 'Accept': 'application/json' }
             });
 
             const text = await response.text();
             
-            if (!text.startsWith('{')) {
+            if (!text.trim().startsWith('{')) {
                 return { success: false, isLoggedIn: false };
             }
 
             const data = JSON.parse(text);
             
-            if (data.success && data.isLoggedIn) {
-                // Update localStorage
-                if (data.user) {
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    localStorage.setItem('isLoggedIn', 'true');
+            if (data.success && data.data && data.data.logged_in) {
+                if (data.data.user) {
+                    storeUserData(data.data.user);
                 }
-                return data;
+                if (data.data.csrf_token) {
+                    _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                }
+                return { success: true, isLoggedIn: true, user: data.data.user };
             }
 
             return { success: false, isLoggedIn: false };
+            
         } catch (error) {
             console.error('[Auth] Check auth error:', error);
             return { success: false, isLoggedIn: false };
@@ -264,47 +265,68 @@ const AuthHelper = (() => {
     };
 
     /**
-     * ✅ FIXED: Logout
+     * FIXED: Logout
      */
     const logout = async () => {
         try {
             const csrf = _csrfToken || await getCsrfToken();
 
-            const response = await fetch(`${API_BASE}?action=logout`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-Token': csrf
-                },
-                body: JSON.stringify({ csrf_token: csrf })
-            });
-
-            // Clear localStorage regardless of response
-            localStorage.removeItem('user');
-            localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('userId');
-
-            const text = await response.text();
-            
-            if (!text.startsWith('{')) {
-                return { success: true, message: 'Logged out successfully' };
+            // Try server logout
+            try {
+                await fetch(`${API_BASE}?action=logout`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-Token': csrf
+                    },
+                    body: JSON.stringify({ csrf_token: csrf })
+                });
+            } catch (e) {
+                // Ignore server errors on logout
             }
 
-            return JSON.parse(text);
+            // Always clear local data
+            clearUserData();
+            _csrfToken = '';
+
+            return { success: true, message: 'Logged out successfully' };
+            
         } catch (error) {
             console.error('[Auth] Logout error:', error);
-            // Still clear local data
-            localStorage.removeItem('user');
-            localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('userId');
+            clearUserData();
             return { success: true, message: 'Logged out successfully' };
         }
     };
 
     /**
-     * ✅ Get current user from localStorage
+     * Store user data in localStorage
+     */
+    const storeUserData = (user) => {
+        try {
+            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem('isLoggedIn', 'true');
+            localStorage.setItem('userId', user.id?.toString() || '');
+            localStorage.setItem('walletBalance', (user.wallet_balance || 0).toString());
+        } catch (e) {
+            console.warn('[Auth] Could not save to localStorage:', e);
+        }
+    };
+
+    /**
+     * Clear user data from localStorage
+     */
+    const clearUserData = () => {
+        localStorage.removeItem('user');
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('walletBalance');
+        localStorage.removeItem('csrf_token');
+    };
+
+    /**
+     * Get current user from localStorage
      */
     const getCurrentUser = () => {
         try {
@@ -316,20 +338,33 @@ const AuthHelper = (() => {
     };
 
     /**
-     * ✅ Check if user is logged in
+     * Check if user is logged in
      */
     const isLoggedIn = () => {
         return localStorage.getItem('isLoggedIn') === 'true';
     };
 
     /**
-     * ✅ Get user ID
+     * Get user ID
      */
     const getUserId = () => {
         return localStorage.getItem('userId') || null;
     };
 
-    // ✅ Public API
+    /**
+     * Update wallet balance in localStorage
+     */
+    const updateWalletBalance = (balance) => {
+        localStorage.setItem('walletBalance', balance.toString());
+        // Also update in user object
+        const user = getCurrentUser();
+        if (user) {
+            user.wallet_balance = parseFloat(balance);
+            localStorage.setItem('user', JSON.stringify(user));
+        }
+    };
+
+    // Public API
     return {
         register,
         login,
@@ -339,19 +374,19 @@ const AuthHelper = (() => {
         getCurrentUser,
         isLoggedIn,
         getUserId,
-        API_BASE // expose for debugging/other scripts
+        updateWalletBalance,
+        API_BASE
     };
 })();
 
-// ✅ Export for ES modules
+// Export for ES modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = AuthHelper;
 }
 
-// ✅ Make it globally available
+// Make globally available
 if (typeof window !== 'undefined') {
     window.AuthHelper = AuthHelper;
 }
 
-console.log('[Auth] AuthHelper loaded successfully ✅');
-console.log('[Auth] API Base:', AuthHelper.API_BASE || 'Not set');
+console.log('✅ [Auth] AuthHelper loaded - API:', AuthHelper.API_BASE);
