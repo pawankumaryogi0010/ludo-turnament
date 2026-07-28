@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * GAME.PHP - Ludo Game Page (FIXED - SERVER AUTHORITY)
+ * GAME.PHP - Ludo Game Page (FIXED API PATHS + ZUPPEE UI)
  * Ludo Tournament Platform - Complete Game Interface
- * Version: 4.0.0 - ALL PATHS FIXED
+ * Version: 5.0.0 - API PATHS FIXED + ZUPPEE STYLE
  * ======================================================
  */
 
@@ -49,110 +49,178 @@ if (!$match) {
     exit;
 }
 
-if ($match['player1_id'] != $userId && $match['player2_id'] != $userId) {
+$player1Id = intval($match['player1_id'] ?? 0);
+$player2Id = intval($match['player2_id'] ?? 0);
+
+if ($player1Id !== $userId && $player2Id !== $userId) {
     header('Location: dashboard.php');
     exit;
 }
 
-$playerNumber = ($match['player1_id'] == $userId) ? 1 : 2;
+$playerNumber = ($player1Id === $userId) ? 1 : 2;
 $opponentNumber = $playerNumber === 1 ? 2 : 1;
 $opponentName = $playerNumber === 1 ? ($match['player2_name'] ?? $match['p2_username']) : ($match['player1_name'] ?? $match['p1_username']);
+$myName = $playerNumber === 1 ? ($match['player1_name'] ?? $match['p1_username']) : ($match['player2_name'] ?? $match['p2_username']);
 
 $csrf_token = CSRFToken::generate();
-
-// Dynamic base path detection
 $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-if ($basePath === '') {
-    $basePath = '';
-}
+if ($basePath === '') $basePath = '';
 
-// Get board state from JSON
-$boardState = json_decode($match['board_state'] ?? '{}', true);
-$p1Tokens = $boardState['player1'] ?? ['token1' => -1, 'token2' => -1, 'token3' => -1, 'token4' => -1];
-$p2Tokens = $boardState['player2'] ?? ['token1' => -1, 'token2' => -1, 'token3' => -1, 'token4' => -1];
-
-$USE_WEBSOCKET = false; // Use polling for shared hosting
+$boardState = json_decode($match['board_state'] ?? '{}', true) ?: [];
+$currentTurnUserId = intval($match['current_turn_id'] ?? 0);
+$currentTurn = ($currentTurnUserId === $player1Id) ? 1 : 2;
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0a0e1a">
+    <meta name="theme-color" content="#5B2D8E">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Ludo Game - Ludo Tournament Pro</title>
+    <title>Ludo Game - Ludo Pro</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-    <!-- FIXED: Dynamic CSS path -->
-    <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/style.css">
-    <link rel="manifest" href="<?php echo $basePath; ?>/manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: #0a0e1a;
-            color: #f1f5f9;
+            font-family: 'Poppins', sans-serif;
+            background: #5B2D8E;
             overflow: hidden;
             height: 100vh;
+            height: 100dvh;
         }
 
         .game-wrapper {
             max-width: 480px;
             margin: 0 auto;
             height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
-            background: #0a0e1a;
+            background: linear-gradient(180deg, #5B2D8E 0%, #3B1A6A 100%);
             position: relative;
         }
 
+        /* Header */
         .game-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 10px 16px;
-            background: rgba(10,14,26,0.95);
+            background: rgba(255,255,255,0.1);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255,255,255,0.06);
             flex-shrink: 0;
             z-index: 10;
         }
 
         .game-header .back-btn {
-            color: #94a3b8;
+            color: white;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
-            padding: 6px 12px;
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 8px;
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 20px;
             transition: background 0.2s;
         }
 
-        .game-header .back-btn:hover { background: rgba(255,255,255,0.04); }
+        .game-header .back-btn:hover { background: rgba(255,255,255,0.25); }
 
         .game-header .room-code {
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 700;
-            color: #fbbf24;
+            color: #FFD700;
             letter-spacing: 1px;
+            text-shadow: 0 0 20px rgba(255,215,0,0.3);
         }
 
         .game-header .player-info {
-            font-size: 12px;
-            color: #94a3b8;
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+            text-align: right;
         }
 
         .game-header .player-info span {
-            color: #f1f5f9;
+            color: white;
             font-weight: 600;
         }
 
+        /* Player Bars */
+        .player-bars {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 16px;
+            gap: 12px;
+        }
+
+        .player-bar {
+            flex: 1;
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+
+        .player-bar.active-turn {
+            border-color: #FFD700;
+            background: rgba(255,215,0,0.1);
+            animation: pulse-border 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: #FFD700; box-shadow: 0 0 10px rgba(255,215,0,0.2); }
+            50% { border-color: #FFA500; box-shadow: 0 0 20px rgba(255,215,0,0.4); }
+        }
+
+        .player-bar .avatar-mini {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .avatar-p1 { background: #EF4444; color: white; }
+        .avatar-p2 { background: #3B82F6; color: white; }
+
+        .player-bar .bar-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .player-bar .bar-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .player-bar .bar-tokens {
+            font-size: 10px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .player-bar .bar-score {
+            font-size: 14px;
+            font-weight: 700;
+            color: #FFD700;
+        }
+
+        /* Canvas Container */
         .game-canvas-container {
             flex: 1;
             display: flex;
@@ -166,877 +234,609 @@ $USE_WEBSOCKET = false; // Use polling for shared hosting
         .game-canvas-container canvas {
             max-width: 100%;
             max-height: 100%;
-            border-radius: 12px;
-            background: #1a1a2e;
-            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+            border-radius: 16px;
+            background: #1A1A2E;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5), 0 0 80px rgba(91,45,142,0.3);
             cursor: pointer;
             touch-action: none;
         }
 
+        /* Dice Display */
+        .dice-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            background: white;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: 900;
+            color: #1A1A2E;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            z-index: 20;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .dice-display.rolling {
+            animation: diceRoll 0.6s ease;
+        }
+
+        @keyframes diceRoll {
+            0% { transform: translate(-50%, -50%) rotate(0deg) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) rotate(360deg) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) rotate(720deg) scale(1); opacity: 1; }
+        }
+
+        /* Footer */
         .game-footer {
-            padding: 10px 16px;
-            background: rgba(10,14,26,0.95);
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.1);
             backdrop-filter: blur(10px);
-            border-top: 1px solid rgba(255,255,255,0.06);
             flex-shrink: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
             gap: 8px;
             z-index: 10;
         }
 
-        .game-footer .turn-info {
-            font-size: 13px;
-            color: #94a3b8;
+        .game-footer .turn-text {
+            font-size: 12px;
+            color: rgba(255,255,255,0.8);
         }
 
-        .game-footer .turn-info .highlight {
-            color: #fbbf24;
+        .game-footer .turn-text .highlight {
+            color: #FFD700;
             font-weight: 700;
         }
 
-        .game-footer .action-btn {
-            padding: 8px 20px;
+        .btn-roll {
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #00A859, #22C55E);
+            color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 30px;
             font-weight: 700;
-            font-size: 13px;
+            font-size: 16px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
             font-family: inherit;
+            box-shadow: 0 4px 16px rgba(0,168,89,0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .game-footer .action-btn.primary {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: #1a1a2e;
-        }
-
-        .game-footer .action-btn.primary:hover {
-            transform: scale(1.04);
-            box-shadow: 0 0 20px rgba(251,191,36,0.2);
-        }
-
-        .game-footer .action-btn.primary:disabled {
+        .btn-roll:hover { transform: scale(1.05); box-shadow: 0 6px 24px rgba(0,168,89,0.6); }
+        .btn-roll:active { transform: scale(0.95); }
+        .btn-roll:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
             box-shadow: none !important;
         }
 
-        .game-footer .action-btn.secondary {
-            background: rgba(255,255,255,0.06);
-            color: #f1f5f9;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        .game-footer .action-btn.secondary:hover { background: rgba(255,255,255,0.1); }
-
-        .game-footer .right-controls {
+        .timer-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.2);
             display: flex;
             align-items: center;
-            gap: 12px;
+            justify-content: center;
+            position: relative;
         }
 
-        .timer-display {
-            font-size: 20px;
+        .timer-circle svg {
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            transform: rotate(-90deg);
+        }
+
+        .timer-circle .timer-text {
+            font-size: 16px;
             font-weight: 700;
-            color: #10b981;
-            min-width: 40px;
-            text-align: center;
-            font-variant-numeric: tabular-nums;
-            transition: color 0.3s ease;
+            color: white;
+            z-index: 1;
         }
 
-        .timer-display.warning {
-            color: #f59e0b;
-            animation: pulse-timer 1s ease-in-out infinite;
+        .timer-circle.warning { border-color: #F59E0B; }
+        .timer-circle.warning .timer-text { color: #F59E0B; }
+        .timer-circle.danger { border-color: #EF4444; animation: pulse 0.5s infinite; }
+        .timer-circle.danger .timer-text { color: #EF4444; }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
         }
 
-        .timer-display.danger {
-            color: #ef4444;
-            animation: pulse-timer 0.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse-timer {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.15); opacity: 0.7; }
-        }
-
-        .connection-status {
-            position: fixed;
-            top: 76px;
-            right: 16px;
-            padding: 4px 14px;
-            border-radius: 9999px;
-            font-size: 10px;
-            font-weight: 600;
-            z-index: 50;
-            transition: all 0.3s ease;
+        /* Winner Overlay */
+        .winner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
             backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
         }
 
-        .connection-status.online {
-            background: rgba(16,185,129,0.2);
-            color: #10b981;
-            border: 1px solid rgba(16,185,129,0.2);
+        .winner-overlay.active { display: flex; animation: fadeIn 0.5s ease; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .winner-overlay .trophy { font-size: 72px; animation: bounce 1s infinite; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
         }
 
-        .connection-status.offline {
-            background: rgba(239,68,68,0.2);
-            color: #ef4444;
-            border: 1px solid rgba(239,68,68,0.2);
-            animation: pulse-badge 1s ease-in-out infinite;
+        .winner-overlay .win-title {
+            font-size: 28px;
+            font-weight: 800;
+            color: #FFD700;
+            margin-top: 12px;
         }
 
-        .connection-status.connecting {
-            background: rgba(245,158,11,0.2);
-            color: #f59e0b;
-            border: 1px solid rgba(245,158,11,0.2);
-            animation: pulse-badge 1s ease-in-out infinite;
+        .winner-overlay .win-amount {
+            font-size: 18px;
+            color: rgba(255,255,255,0.8);
+            margin-top: 4px;
         }
+
+        .winner-overlay .win-amount span {
+            color: #FFD700;
+            font-weight: 700;
+        }
+
+        .winner-overlay .btn-back {
+            margin-top: 20px;
+            padding: 12px 32px;
+            background: white;
+            color: #5B2D8E;
+            border: none;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        /* Toast */
+        .toast-zupee {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 2000;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .toast-zupee.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast-zupee.success { background: #D1FAE5; color: #00A859; }
+        .toast-zupee.error { background: #FEE2E2; color: #EF4444; }
+        .toast-zupee.info { background: #E0E7FF; color: #3730A3; }
 
         @media (max-width: 480px) {
-            .game-header { padding: 6px 12px; }
-            .game-header .room-code { font-size: 12px; }
-            .game-footer { padding: 6px 12px; }
-            .game-footer .action-btn { padding: 6px 14px; font-size: 12px; }
-            .timer-display { font-size: 16px; min-width: 30px; }
-            .connection-status { top: 60px; right: 8px; font-size: 8px; padding: 2px 8px; }
+            .game-header { padding: 8px 12px; }
+            .game-footer { padding: 8px 12px; }
+            .btn-roll { padding: 10px 24px; font-size: 14px; }
         }
     </style>
 </head>
 <body>
     <div class="game-wrapper">
 
+        <!-- Header -->
         <div class="game-header">
             <a href="dashboard.php" class="back-btn">← Back</a>
             <div class="room-code">🔑 <?php echo htmlspecialchars($match['room_code']); ?></div>
             <div class="player-info">
-                Player <span><?php echo $playerNumber; ?></span> vs <span><?php echo htmlspecialchars($opponentName); ?></span>
+                <?php echo htmlspecialchars($myName); ?> vs <?php echo htmlspecialchars($opponentName); ?>
             </div>
         </div>
 
+        <!-- Player Bars -->
+        <div class="player-bars">
+            <div class="player-bar active-turn" id="player1Bar">
+                <div class="avatar-mini avatar-p1"><?php echo strtoupper(substr($match['player1_name'] ?? $match['p1_username'] ?? 'P1', 0, 1)); ?></div>
+                <div class="bar-info">
+                    <div class="bar-name"><?php echo htmlspecialchars($match['player1_name'] ?? $match['p1_username'] ?? 'Player 1'); ?></div>
+                    <div class="bar-tokens">🏠 <span id="p1Home">0</span>/4</div>
+                </div>
+                <div class="bar-score" id="p1Score">0</div>
+            </div>
+            <div class="player-bar" id="player2Bar">
+                <div class="avatar-mini avatar-p2"><?php echo strtoupper(substr($match['player2_name'] ?? $match['p2_username'] ?? 'P2', 0, 1)); ?></div>
+                <div class="bar-info">
+                    <div class="bar-name"><?php echo htmlspecialchars($match['player2_name'] ?? $match['p2_username'] ?? 'Player 2'); ?></div>
+                    <div class="bar-tokens">🏠 <span id="p2Home">0</span>/4</div>
+                </div>
+                <div class="bar-score" id="p2Score">0</div>
+            </div>
+        </div>
+
+        <!-- Game Canvas -->
         <div class="game-canvas-container">
             <canvas id="ludoCanvas"></canvas>
+            <div class="dice-display" id="diceDisplay" style="display:none;">1</div>
+            <div class="winner-overlay" id="winnerOverlay">
+                <div class="trophy">🏆</div>
+                <div class="win-title" id="winnerName">Player Wins!</div>
+                <div class="win-amount">Prize: <span id="winnerAmount">₹0</span></div>
+                <button class="btn-back" onclick="window.location.href='dashboard.php'">Back to Dashboard</button>
+            </div>
         </div>
 
+        <!-- Footer -->
         <div class="game-footer">
-            <div class="turn-info">
+            <div class="turn-text">
                 Turn: <span class="highlight" id="turnDisplay">Waiting...</span>
             </div>
-            <div class="right-controls">
-                <div class="timer-display" id="timerDisplay">15</div>
-                <button class="action-btn primary" id="rollBtn">🎲 Roll</button>
-                <button class="action-btn secondary" id="resetBtn">↻</button>
+            <button class="btn-roll" id="rollBtn" disabled>🎲 Roll Dice</button>
+            <div class="timer-circle" id="timerCircle">
+                <svg width="54" height="54" viewBox="0 0 54 54">
+                    <circle cx="27" cy="27" r="24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="3"/>
+                    <circle cx="27" cy="27" r="24" fill="none" stroke="#00A859" stroke-width="3" stroke-dasharray="150.8" stroke-dashoffset="0" id="timerProgress"/>
+                </svg>
+                <span class="timer-text" id="timerText">15</span>
             </div>
         </div>
-
-        <div class="connection-status connecting" id="connectionStatus">🔄 Connecting...</div>
 
     </div>
 
-    <!-- FIXED: Dynamic JS path -->
-    <script src="<?php echo $basePath; ?>/assets/js/audio-synth.js"></script>
+    <div class="toast-zupee" id="toast"><span id="toastMessage"></span></div>
 
     <script>
         // ==============================================
-        // GAME CONTROLLER - SERVER AUTHORITY
+        // GAME CONTROLLER
         // ==============================================
-        document.addEventListener('DOMContentLoaded', function() {
-            const canvas = document.getElementById('ludoCanvas');
-            const turnDisplay = document.getElementById('turnDisplay');
-            const timerDisplay = document.getElementById('timerDisplay');
-            const rollBtn = document.getElementById('rollBtn');
-            const resetBtn = document.getElementById('resetBtn');
-            const connectionStatus = document.getElementById('connectionStatus');
+        const MATCH_ID = <?php echo $matchId; ?>;
+        const USER_ID = <?php echo $userId; ?>;
+        const PLAYER_NUMBER = <?php echo $playerNumber; ?>;
+        const CSRF_TOKEN = '<?php echo $csrf_token; ?>';
+        // FIXED: API path - use api/ directly, not api/v1/
+        const API_BASE = '<?php echo $basePath; ?>/api/game.php';
 
-            const playerNumber = <?php echo $playerNumber; ?>;
-            const matchId = <?php echo $matchId; ?>;
-            const userId = <?php echo $userId; ?>;
-            const opponentName = '<?php echo htmlspecialchars($opponentName); ?>';
-            const csrfToken = '<?php echo $csrf_token; ?>';
-            const basePath = '<?php echo $basePath; ?>';
+        let boardState = <?php echo json_encode($boardState); ?> || { player1: {}, player2: {} };
+        let currentTurn = <?php echo $currentTurn; ?>;
+        let isGameOver = <?php echo ($match['status'] === 'completed') ? 'true' : 'false'; ?>;
+        let canRoll = false;
+        let timerInterval = null;
+        let timeLeft = 15;
+        const MAX_TIME = 15;
+        let pollInterval = null;
 
-            let timerInterval = null;
-            let timeLeft = 15;
-            let timerRunning = false;
-            const MAX_TIME = 15;
+        // Initialize board state
+        if (!boardState.player1) boardState.player1 = {};
+        if (!boardState.player2) boardState.player2 = {};
+        for (let i = 1; i <= 4; i++) {
+            if (boardState.player1['token' + i] === undefined) boardState.player1['token' + i] = -1;
+            if (boardState.player2['token' + i] === undefined) boardState.player2['token' + i] = -1;
+        }
 
-            let pollInterval = null;
-            let lastActionId = 0;
-            let isPolling = false;
-            let currentTurn = <?php echo intval($match['current_turn_id']) == $userId ? 1 : 2; ?>;
-            let isGameOver = false;
-            let canRoll = true;
-            let hasRolled = false;
+        // ==============================================
+        // CANVAS RENDERER
+        // ==============================================
+        const canvas = document.getElementById('ludoCanvas');
+        const ctx = canvas.getContext('2d');
 
-            // ==============================================
-            // CONNECTION STATUS
-            // ==============================================
-            function setConnectionStatus(status, message) {
-                connectionStatus.className = 'connection-status ' + status;
-                connectionStatus.textContent = message;
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth - 16, container.clientHeight - 16, 420);
+            canvas.width = size;
+            canvas.height = size;
+            renderBoard();
+        }
 
-                if (status === 'online') {
-                    setTimeout(() => {
-                        connectionStatus.style.opacity = '0';
-                        setTimeout(() => {
-                            connectionStatus.style.display = 'none';
-                        }, 500);
-                    }, 3000);
-                } else {
-                    connectionStatus.style.display = 'block';
-                    connectionStatus.style.opacity = '1';
-                }
+        function getTrackPositions() {
+            const cs = (canvas.width - 2 * (canvas.width * 0.04)) / 13;
+            const p = canvas.width * 0.04;
+            const positions = [];
+            for (let i = 0; i < 13; i++) positions.push({ x: p + i * cs, y: p + 12 * cs });
+            for (let i = 1; i < 13; i++) positions.push({ x: p + 12 * cs, y: p + (12 - i) * cs });
+            for (let i = 1; i < 13; i++) positions.push({ x: p + (12 - i) * cs, y: p });
+            for (let i = 1; i < 13; i++) positions.push({ x: p, y: p + i * cs });
+            return positions;
+        }
+
+        function renderBoard() {
+            const size = canvas.width;
+            const p = size * 0.04;
+            const cs = (size - 2 * p) / 13;
+            const positions = getTrackPositions();
+
+            ctx.clearRect(0, 0, size, size);
+
+            // Background
+            const bg = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+            bg.addColorStop(0, '#1A1A2E');
+            bg.addColorStop(1, '#0A0E1A');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, size, size);
+
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 15; i++) {
+                const pos = p + i * cs;
+                ctx.beginPath(); ctx.moveTo(pos, p); ctx.lineTo(pos, size - p); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(p, pos); ctx.lineTo(size - p, pos); ctx.stroke();
             }
 
-            setConnectionStatus('connecting', '🔄 Connecting...');
+            // Home bases
+            drawHome(ctx, p, p, cs, '#EF4444');
+            drawHome(ctx, size - p - 6*cs, p, cs, '#3B82F6');
+            drawHome(ctx, p, size - p - 6*cs, cs, '#10B981');
+            drawHome(ctx, size - p - 6*cs, size - p - 6*cs, cs, '#F59E0B');
 
-            // ==============================================
-            // LUDO RENDERER
-            // ==============================================
-            class LudoRenderer {
-                constructor(canvas) {
-                    this.canvas = canvas;
-                    this.ctx = canvas.getContext('2d');
-                    this.cellSize = 38;
-                    this.padding = 20;
-                    this.boardSize = 0;
-                    this.trackPositions = [];
+            // Center
+            ctx.fillStyle = 'rgba(255,215,0,0.05)';
+            ctx.fillRect(p + 6*cs, p + 6*cs, 2*cs, 2*cs);
 
-                    this.resize();
-                    this.buildTrack();
-                }
+            // Tokens
+            drawTokens(ctx, boardState, positions, cs);
 
-                resize() {
-                    const container = this.canvas.parentElement;
-                    const rect = container.getBoundingClientRect();
-                    const size = Math.min(rect.width - 16, rect.height - 16, 420);
+            // Update player bars
+            updatePlayerBars();
+        }
 
-                    this.canvas.width = size;
-                    this.canvas.height = size;
-                    this.boardSize = size;
-                    this.cellSize = (size - 2 * this.padding) / 13;
-                    this.padding = this.cellSize * 0.5;
-                    this.buildTrack();
-                }
+        function drawHome(ctx, x, y, cs, color) {
+            const s = 6 * cs;
+            ctx.fillStyle = color + '15';
+            ctx.fillRect(x, y, s, s);
+            ctx.strokeStyle = color + '30';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, s, s);
+        }
 
-                buildTrack() {
-                    this.trackPositions = [];
-                    const cs = this.cellSize;
-                    const p = this.padding;
+        function drawTokens(ctx, state, positions, cs) {
+            const players = {
+                1: { data: state.player1 || {}, color: '#EF4444' },
+                2: { data: state.player2 || {}, color: '#3B82F6' }
+            };
 
-                    for (let i = 0; i < 13; i++) {
-                        this.trackPositions.push({ x: p + i * cs, y: p + 12 * cs });
-                    }
-                    for (let i = 1; i < 13; i++) {
-                        this.trackPositions.push({ x: p + 12 * cs, y: p + (12 - i) * cs });
-                    }
-                    for (let i = 1; i < 13; i++) {
-                        this.trackPositions.push({ x: p + (12 - i) * cs, y: p });
-                    }
-                    for (let i = 1; i < 13; i++) {
-                        this.trackPositions.push({ x: p, y: p + i * cs });
-                    }
-                }
+            for (const [pid, player] of Object.entries(players)) {
+                for (let i = 1; i <= 4; i++) {
+                    const pos = player.data['token' + i] ?? -1;
+                    if (pos < 0 || pos >= positions.length) continue;
+                    const pt = positions[pos];
+                    if (!pt) continue;
 
-                render(boardState, diceValue, currentTurn, isGameOver, winnerId) {
-                    const ctx = this.ctx;
-                    const size = this.boardSize;
-                    const p = this.padding;
-                    const cs = this.cellSize;
-
-                    ctx.clearRect(0, 0, size, size);
-
-                    // Background
-                    const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-                    gradient.addColorStop(0, '#1a1a2e');
-                    gradient.addColorStop(1, '#0a0e1a');
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(0, 0, size, size);
-
-                    // Board border
-                    ctx.strokeStyle = 'rgba(251,191,36,0.2)';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(p, p, size - 2*p, size - 2*p);
-
-                    // Grid
-                    for (let i = 0; i < 15; i++) {
-                        const pos = p + i * cs;
-                        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(pos, p);
-                        ctx.lineTo(pos, size - p);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(p, pos);
-                        ctx.lineTo(size - p, pos);
-                        ctx.stroke();
-                    }
-
-                    // Home bases
-                    this.drawHomeBase(ctx, p, p, cs, '#ef4444', 'P1');
-                    this.drawHomeBase(ctx, size - p - 6*cs, p, cs, '#3b82f6', 'P2');
-                    this.drawHomeBase(ctx, p, size - p - 6*cs, cs, '#10b981', 'P3');
-                    this.drawHomeBase(ctx, size - p - 6*cs, size - p - 6*cs, cs, '#f59e0b', 'P4');
-
-                    // Center
-                    ctx.fillStyle = 'rgba(251,191,36,0.05)';
-                    ctx.fillRect(p + 6*cs, p + 6*cs, 2*cs, 2*cs);
-                    ctx.strokeStyle = 'rgba(251,191,36,0.1)';
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(p + 6*cs, p + 6*cs, 2*cs, 2*cs);
-
-                    // Draw tokens
-                    this.drawTokens(ctx, boardState);
-
-                    // Dice
-                    if (diceValue > 0) {
-                        this.drawDice(ctx, diceValue);
-                    }
-
-                    // Turn indicator
-                    this.drawTurnIndicator(ctx, currentTurn);
-
-                    // Winner overlay
-                    if (isGameOver && winnerId) {
-                        this.drawWinnerOverlay(ctx, winnerId);
-                    }
-                }
-
-                drawHomeBase(ctx, x, y, cs, color, label) {
-                    const size = 6 * cs;
-                    ctx.fillStyle = color + '15';
-                    ctx.fillRect(x, y, size, size);
-                    ctx.strokeStyle = color + '40';
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(x, y, size, size);
-
-                    ctx.fillStyle = color;
-                    ctx.font = `${cs * 0.6}px Inter, sans-serif`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(label, x + size/2, y + size/2);
-                }
-
-                drawTokens(ctx, boardState) {
-                    const players = {
-                        1: { state: boardState?.player1 || {}, color: '#ef4444', label: 'P1' },
-                        2: { state: boardState?.player2 || {}, color: '#3b82f6', label: 'P2' }
-                    };
-
-                    for (const [playerId, player] of Object.entries(players)) {
-                        const color = player.color;
-                        for (let i = 1; i <= 4; i++) {
-                            const tokenKey = 'token' + i;
-                            const position = player.state[tokenKey] ?? -1;
-
-                            if (position < 0 || position > 56) continue;
-
-                            const pos = this.trackPositions[position] || { x: 0, y: 0 };
-                            const x = pos.x || 0;
-                            const y = pos.y || 0;
-
-                            if (x === 0 && y === 0) continue;
-
-                            const gradient2 = ctx.createRadialGradient(x-3, y-3, 2, x, y, 10);
-                            gradient2.addColorStop(0, '#ffffff');
-                            gradient2.addColorStop(0.2, color);
-                            gradient2.addColorStop(1, color);
-                            ctx.fillStyle = gradient2;
-                            ctx.shadowColor = color + '60';
-                            ctx.shadowBlur = 10;
-                            ctx.beginPath();
-                            ctx.arc(x, y, 10, 0, Math.PI * 2);
-                            ctx.fill();
-                            ctx.shadowBlur = 0;
-
-                            ctx.strokeStyle = '#ffffff30';
-                            ctx.lineWidth = 1;
-                            ctx.beginPath();
-                            ctx.arc(x, y, 10, 0, Math.PI * 2);
-                            ctx.stroke();
-
-                            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                            ctx.beginPath();
-                            ctx.arc(x-3, y-4, 4, 0, Math.PI * 2);
-                            ctx.fill();
-
-                            ctx.fillStyle = '#ffffff';
-                            ctx.font = '8px Inter, sans-serif';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText(i, x, y + 1);
-                        }
-                    }
-                }
-
-                drawDice(ctx, value) {
-                    const size = this.boardSize;
-                    const cx = size / 2;
-                    const cy = size / 2 - 30;
-                    const diceSize = 36;
-
-                    const gradient = ctx.createRadialGradient(cx-4, cy-4, 2, cx, cy, diceSize/2);
-                    gradient.addColorStop(0, '#ffffff');
-                    gradient.addColorStop(1, '#e2e8f0');
-                    ctx.fillStyle = gradient;
-                    ctx.shadowColor = 'rgba(251,191,36,0.3)';
-                    ctx.shadowBlur = 20;
+                    const x = pt.x, y = pt.y;
+                    const grad = ctx.createRadialGradient(x-3, y-3, 2, x, y, 10);
+                    grad.addColorStop(0, '#FFFFFF');
+                    grad.addColorStop(0.3, player.color);
+                    grad.addColorStop(1, player.color);
+                    ctx.fillStyle = grad;
+                    ctx.shadowColor = player.color + '60';
+                    ctx.shadowBlur = 10;
                     ctx.beginPath();
-                    ctx.roundRect(cx - diceSize/2, cy - diceSize/2, diceSize, diceSize, 6);
+                    ctx.arc(x, y, 10, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.shadowBlur = 0;
 
-                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.strokeStyle = '#FFFFFF30';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.roundRect(cx - diceSize/2, cy - diceSize/2, diceSize, diceSize, 6);
+                    ctx.arc(x, y, 10, 0, Math.PI * 2);
                     ctx.stroke();
 
-                    const dotPositions = {
-                        1: [[0, 0]],
-                        2: [[-1, -1], [1, 1]],
-                        3: [[-1, -1], [0, 0], [1, 1]],
-                        4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
-                        5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
-                        6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]
-                    };
-
-                    const dots = dotPositions[value] || [];
-                    const dotSize = 5;
-                    const spacing = 10;
-
-                    ctx.fillStyle = '#1e293b';
-                    for (const [dx, dy] of dots) {
-                        const dotX = cx + dx * spacing;
-                        const dotY = cy + dy * spacing;
-                        ctx.beginPath();
-                        ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-
-                drawTurnIndicator(ctx, currentTurn) {
-                    const size = this.boardSize;
-                    const player = currentTurn === 1 ? 'P1' : 'P2';
-                    const color = currentTurn === 1 ? '#ef4444' : '#3b82f6';
-
-                    ctx.fillStyle = color + '30';
-                    ctx.fillRect(0, size - 30, size, 30);
-
-                    ctx.fillStyle = color;
-                    ctx.font = '12px Inter, sans-serif';
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = 'bold 8px Poppins';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(`🎯 ${player}'s Turn`, size/2, size - 15);
-                }
-
-                drawWinnerOverlay(ctx, winnerId) {
-                    const size = this.boardSize;
-                    const playerName = winnerId === 1 ? 'Player 1' : 'Player 2';
-
-                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                    ctx.fillRect(0, 0, size, size);
-
-                    ctx.fillStyle = '#fbbf24';
-                    ctx.font = 'bold 32px Inter, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.shadowColor = '#fbbf2440';
-                    ctx.shadowBlur = 30;
-                    ctx.fillText('🏆', size/2, size/2 - 30);
-                    ctx.shadowBlur = 0;
-
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = 'bold 24px Inter, sans-serif';
-                    ctx.fillText(`${playerName} Wins!`, size/2, size/2 + 30);
-
-                    ctx.fillStyle = '#94a3b8';
-                    ctx.font = '16px Inter, sans-serif';
-                    ctx.fillText('🎉 Congratulations!', size/2, size/2 + 65);
+                    ctx.fillText(i, x, y + 1);
                 }
             }
+        }
 
-            // ==============================================
-            // INIT RENDERER
-            // ==============================================
-            const renderer = new LudoRenderer(canvas);
+        function updatePlayerBars() {
+            const p1Home = countHomeTokens(boardState.player1);
+            const p2Home = countHomeTokens(boardState.player2);
+            document.getElementById('p1Home').textContent = p1Home;
+            document.getElementById('p2Home').textContent = p2Home;
 
-            // Load initial board state from server
-            let boardState = <?php echo json_encode($boardState); ?> || { player1: {}, player2: {} };
+            document.getElementById('player1Bar').classList.toggle('active-turn', currentTurn === 1);
+            document.getElementById('player2Bar').classList.toggle('active-turn', currentTurn === 2);
+        }
 
-            // Ensure token structure
-            if (!boardState.player1) boardState.player1 = {};
-            if (!boardState.player2) boardState.player2 = {};
+        function countHomeTokens(player) {
+            let count = 0;
             for (let i = 1; i <= 4; i++) {
-                if (boardState.player1['token' + i] === undefined) boardState.player1['token' + i] = -1;
-                if (boardState.player2['token' + i] === undefined) boardState.player2['token' + i] = -1;
+                if ((player['token' + i] ?? -1) >= 56) count++;
             }
+            return count;
+        }
 
-            const diceValue = <?php echo intval($match['dice_value']); ?>;
-            currentTurn = <?php echo intval($match['current_turn_id']) == $userId ? 1 : 2; ?>;
-            isGameOver = <?php echo $match['status'] === 'completed' ? 'true' : 'false'; ?>;
-            const winnerId = <?php echo intval($match['winner_id']); ?>;
+        // ==============================================
+        // POLLING (FIXED API PATH)
+        // ==============================================
+        function startPolling() {
+            if (pollInterval) return;
+            pollInterval = setInterval(pollGameState, 1500);
+            pollGameState();
+        }
 
-            renderer.render(boardState, diceValue, currentTurn, isGameOver, winnerId);
-            updateTurnDisplay();
+        async function pollGameState() {
+            if (isGameOver) return;
+            try {
+                const res = await fetch(`${API_BASE}?action=get_state&match_id=${MATCH_ID}`);
+                const data = await res.json();
+                if (!data.success) return;
 
-            // ==============================================
-            // POLLING SYSTEM
-            // ==============================================
-            function startPolling() {
-                if (pollInterval) return;
-                isPolling = true;
-                setConnectionStatus('online', '✅ Connected');
+                const match = data.data.match;
+                boardState = data.data.board || boardState;
+                currentTurn = match.current_turn;
+                isGameOver = match.status === 'completed';
 
-                pollInterval = setInterval(() => {
-                    pollForUpdates();
-                }, 2000);
-
-                setTimeout(pollForUpdates, 500);
-            }
-
-            function stopPolling() {
-                if (pollInterval) {
-                    clearInterval(pollInterval);
-                    pollInterval = null;
-                }
-                isPolling = false;
-            }
-
-            function pollForUpdates() {
-                if (!matchId || isGameOver) return;
-
-                fetch(basePath + '/api/game?action=get_state&match_id=' + matchId, {
-                    credentials: 'same-origin'
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const match = data.data.match;
-                        const players = data.data.players;
-                        const board = data.data.board;
-
-                        // Update board state
-                        if (board) {
-                            boardState = board;
-                            if (!boardState.player1) boardState.player1 = {};
-                            if (!boardState.player2) boardState.player2 = {};
-                            for (let i = 1; i <= 4; i++) {
-                                if (boardState.player1['token' + i] === undefined) boardState.player1['token' + i] = -1;
-                                if (boardState.player2['token' + i] === undefined) boardState.player2['token' + i] = -1;
-                            }
-                        }
-
-                        currentTurn = match.current_turn;
-                        isGameOver = match.status === 'completed';
-
-                        // Render
-                        renderer.render(boardState, match.dice_value, currentTurn, isGameOver, match.winner_id);
-
-                        // Update UI
-                        updateTurnDisplay();
-
-                        if (match.status === 'completed') {
-                            stopPolling();
-                            rollBtn.disabled = true;
-                            if (match.winner_id == userId) {
-                                showToast('🏆 You Won! 🏆', 'success');
-                                if (typeof LudoAudioEngine !== 'undefined') {
-                                    LudoAudioEngine.playWin();
-                                }
-                            } else {
-                                showToast('😔 You Lost! Better luck next time.', 'error');
-                                if (typeof LudoAudioEngine !== 'undefined') {
-                                    LudoAudioEngine.playLose();
-                                }
-                            }
-                            setTimeout(() => {
-                                window.location.href = basePath + '/dashboard.php';
-                            }, 5000);
-                        }
-
-                        // Enable/disable roll button
-                        const isMyTurn = currentTurn === playerNumber;
-                        canRoll = isMyTurn && !match.has_rolled && !isGameOver;
-                        rollBtn.disabled = !canRoll;
-
-                        if (isMyTurn && !timerRunning && !isGameOver) {
-                            resetTimer();
-                            startTimer();
-                        }
-                    }
-                })
-                .catch(err => {
-                    console.error('Polling error:', err);
-                });
-            }
-
-            // ==============================================
-            // TIMER FUNCTIONS
-            // ==============================================
-            function startTimer() {
-                stopTimer();
-                timeLeft = MAX_TIME;
-                updateTimerDisplay();
-                timerRunning = true;
-
-                timerInterval = setInterval(function() {
-                    timeLeft--;
-                    updateTimerDisplay();
-
-                    if (timeLeft <= 5) {
-                        timerDisplay.className = 'timer-display warning';
-                        if (typeof LudoAudioEngine !== 'undefined') {
-                            LudoAudioEngine.playNotification();
-                        }
-                    }
-
-                    if (timeLeft <= 3) {
-                        timerDisplay.className = 'timer-display danger';
-                    }
-
-                    if (timeLeft <= 0) {
-                        stopTimer();
-                        handleTimerExpired();
-                    }
-                }, 1000);
-            }
-
-            function stopTimer() {
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
-                timerRunning = false;
-                timerDisplay.className = 'timer-display';
-            }
-
-            function resetTimer() {
-                stopTimer();
-                timeLeft = MAX_TIME;
-                updateTimerDisplay();
-                timerDisplay.className = 'timer-display';
-            }
-
-            function updateTimerDisplay() {
-                timerDisplay.textContent = timeLeft;
-            }
-
-            function handleTimerExpired() {
-                showToast('⏰ Time\'s up! Turn skipped.', 'warning');
-                if (typeof LudoAudioEngine !== 'undefined') {
-                    LudoAudioEngine.playError();
+                if (boardState.player1 === undefined) boardState.player1 = {};
+                if (boardState.player2 === undefined) boardState.player2 = {};
+                for (let i = 1; i <= 4; i++) {
+                    if (boardState.player1['token' + i] === undefined) boardState.player1['token' + i] = -1;
+                    if (boardState.player2['token' + i] === undefined) boardState.player2['token' + i] = -1;
                 }
 
-                // Server will handle turn change
-                // Just reset timer for next turn
-                resetTimer();
-            }
+                renderBoard();
+                updateTurnDisplay();
 
-            // ==============================================
-            // UPDATE TURN DISPLAY
-            // ==============================================
-            function updateTurnDisplay() {
-                const playerName = currentTurn === 1 ?
-                    '<?php echo htmlspecialchars($match['player1_name'] ?? $match['p1_username']); ?>' :
-                    '<?php echo htmlspecialchars($match['player2_name'] ?? $match['p2_username']); ?>';
+                const isMyTurn = currentTurn === PLAYER_NUMBER;
+                canRoll = isMyTurn && !match.has_rolled && !isGameOver;
+                document.getElementById('rollBtn').disabled = !canRoll;
 
-                const isMyTurn = currentTurn === playerNumber;
-                turnDisplay.textContent = isMyTurn ? `${playerName} (You)` : playerName;
-                turnDisplay.style.color = isMyTurn ? '#fbbf24' : '#94a3b8';
+                if (isMyTurn && !isGameOver) startTimer();
+                else stopTimer();
 
-                rollBtn.disabled = !canRoll;
-
-                if (isMyTurn && !timerRunning && !isGameOver) {
-                    resetTimer();
-                    startTimer();
-                }
-            }
-
-            // ==============================================
-            // ROLL DICE - SERVER AUTHORITY
-            // ==============================================
-            rollBtn.addEventListener('click', function() {
                 if (isGameOver) {
-                    showToast('Game is already over!', 'error');
-                    return;
+                    stopPolling();
+                    document.getElementById('rollBtn').disabled = true;
+                    showWinner(match.winner_id);
                 }
-
-                const isMyTurn = currentTurn === playerNumber;
-                if (!isMyTurn) {
-                    showToast('Not your turn!', 'error');
-                    return;
-                }
-
-                if (!canRoll) {
-                    showToast('Wait for your turn!', 'error');
-                    return;
-                }
-
-                stopTimer();
-                rollBtn.disabled = true;
-
-                fetch(basePath + '/api/game?action=roll', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({
-                        match_id: matchId,
-                        csrf_token: csrfToken
-                    })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        canRoll = false;
-                        showToast(`🎲 You rolled ${data.data.dice_value}`, 'info');
-                        if (typeof LudoAudioEngine !== 'undefined') {
-                            LudoAudioEngine.playDiceRoll();
-                        }
-
-                        if (data.data.extra_turn) {
-                            setTimeout(() => {
-                                showToast('🔄 Extra turn! Roll again.', 'success');
-                                if (typeof LudoAudioEngine !== 'undefined') {
-                                    LudoAudioEngine.playSuccess();
-                                }
-                                canRoll = true;
-                                rollBtn.disabled = false;
-                                resetTimer();
-                                startTimer();
-                            }, 800);
-                        } else {
-                            // Turn will change - wait for poll
-                            setTimeout(() => {
-                                rollBtn.disabled = true;
-                            }, 500);
-                        }
-
-                        // Poll immediately for updated state
-                        setTimeout(pollForUpdates, 600);
-                    } else {
-                        showToast(data.message || 'Failed to roll', 'error');
-                        rollBtn.disabled = false;
-                        if (typeof LudoAudioEngine !== 'undefined') {
-                            LudoAudioEngine.playError();
-                        }
-                    }
-                })
-                .catch(() => {
-                    showToast('Network error. Please try again.', 'error');
-                    rollBtn.disabled = false;
-                    if (typeof LudoAudioEngine !== 'undefined') {
-                        LudoAudioEngine.playError();
-                    }
-                });
-            });
-
-            // ==============================================
-            // TOAST NOTIFICATION
-            // ==============================================
-            function showToast(message, type = 'info') {
-                const toast = document.createElement('div');
-                const colors = {
-                    success: 'rgba(16,185,129,0.2)',
-                    error: 'rgba(239,68,68,0.2)',
-                    warning: 'rgba(245,158,11,0.2)',
-                    info: 'rgba(59,130,246,0.2)'
-                };
-                const borderColors = {
-                    success: 'rgba(16,185,129,0.3)',
-                    error: 'rgba(239,68,68,0.3)',
-                    warning: 'rgba(245,158,11,0.3)',
-                    info: 'rgba(59,130,246,0.3)'
-                };
-                const textColors = {
-                    success: '#10b981',
-                    error: '#ef4444',
-                    warning: '#f59e0b',
-                    info: '#3b82f6'
-                };
-
-                toast.style.cssText = `
-                    position: fixed; bottom: 100px; left: 50%;
-                    transform: translateX(-50%);
-                    padding: 12px 24px; border-radius: 12px;
-                    font-weight: 600; font-size: 14px;
-                    z-index: 9999;
-                    background: ${colors[type] || colors.info};
-                    border: 1px solid ${borderColors[type] || borderColors.info};
-                    color: ${textColors[type] || textColors.info};
-                    max-width: 90%; text-align: center;
-                    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
-                    animation: fadeInUp 0.3s ease;
-                    transition: opacity 0.3s ease;
-                `;
-                toast.textContent = message;
-                document.body.appendChild(toast);
-
-                setTimeout(() => {
-                    toast.style.opacity = '0';
-                    setTimeout(() => {
-                        if (toast.parentNode) {
-                            toast.parentNode.removeChild(toast);
-                        }
-                    }, 300);
-                }, 3000);
+            } catch (e) {
+                console.error('Poll error:', e);
             }
+        }
 
-            // ==============================================
-            // RESET GAME
-            // ==============================================
-            resetBtn.addEventListener('click', function() {
-                if (confirm('Reset the game? All progress will be lost.')) {
-                    stopTimer();
-                    showToast('Game reset!', 'info');
-                    if (typeof LudoAudioEngine !== 'undefined') {
-                        LudoAudioEngine.playClick();
+        function stopPolling() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        }
+
+        // ==============================================
+        // ROLL DICE (FIXED API PATH)
+        // ==============================================
+        document.getElementById('rollBtn').addEventListener('click', async function() {
+            if (!canRoll || isGameOver) return;
+            stopTimer();
+            this.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}?action=roll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+                    body: JSON.stringify({ match_id: MATCH_ID, csrf_token: CSRF_TOKEN })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showDiceAnimation(data.data.dice_value);
+                    showToast(`🎲 You rolled ${data.data.dice_value}!`, 'info');
+
+                    if (data.data.extra_turn) {
+                        setTimeout(() => showToast('🔄 Extra turn!', 'success'), 800);
                     }
-                    // Reload from server
-                    pollForUpdates();
+                    setTimeout(pollGameState, 600);
+                } else {
+                    showToast(data.message || 'Roll failed', 'error');
+                    this.disabled = false;
                 }
-            });
-
-            // ==============================================
-            // KEYBOARD SHORTCUTS
-            // ==============================================
-            document.addEventListener('keydown', function(e) {
-                if (e.key === ' ' || e.key === 'Enter') {
-                    e.preventDefault();
-                    if (!rollBtn.disabled) {
-                        rollBtn.click();
-                    }
-                }
-                if (e.key === 'r' && e.ctrlKey) {
-                    e.preventDefault();
-                    resetBtn.click();
-                }
-            });
-
-            // ==============================================
-            // START
-            // ==============================================
-            startPolling();
-
-            // Handle resize
-            window.addEventListener('resize', () => {
-                renderer.resize();
-                renderer.render(boardState, diceValue, currentTurn, isGameOver, winnerId);
-            });
-
-            console.log('🎲 Game loaded! Match ID:', matchId);
-            console.log('👤 Player Number:', playerNumber);
-            console.log('🎯 Current Turn:', currentTurn);
-            console.log('📡 Mode: Polling (Server Authority)');
-            console.log('📂 Base Path:', basePath);
+            } catch (e) {
+                showToast('Network error', 'error');
+                this.disabled = false;
+            }
         });
+
+        function showDiceAnimation(value) {
+            const dice = document.getElementById('diceDisplay');
+            dice.textContent = value;
+            dice.style.display = 'flex';
+            dice.classList.add('rolling');
+            setTimeout(() => {
+                dice.classList.remove('rolling');
+                setTimeout(() => { dice.style.display = 'none'; }, 500);
+            }, 600);
+        }
+
+        // ==============================================
+        // TIMER
+        // ==============================================
+        function startTimer() {
+            stopTimer();
+            timeLeft = MAX_TIME;
+            updateTimerUI();
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerUI();
+                if (timeLeft <= 0) {
+                    stopTimer();
+                    showToast('⏰ Time up!', 'warning');
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+        }
+
+        function updateTimerUI() {
+            document.getElementById('timerText').textContent = timeLeft;
+            const circle = document.getElementById('timerCircle');
+            const progress = document.getElementById('timerProgress');
+            const circumference = 2 * Math.PI * 24;
+            const offset = circumference * (1 - timeLeft / MAX_TIME);
+            progress.setAttribute('stroke-dasharray', circumference);
+            progress.setAttribute('stroke-dashoffset', offset);
+
+            circle.classList.remove('warning', 'danger');
+            if (timeLeft <= 5) circle.classList.add('danger');
+            else if (timeLeft <= 10) circle.classList.add('warning');
+        }
+
+        // ==============================================
+        // TURN DISPLAY
+        // ==============================================
+        function updateTurnDisplay() {
+            const turnDisplay = document.getElementById('turnDisplay');
+            const playerName = currentTurn === 1 ?
+                '<?php echo htmlspecialchars($match['player1_name'] ?? $match['p1_username'] ?? 'P1'); ?>' :
+                '<?php echo htmlspecialchars($match['player2_name'] ?? $match['p2_username'] ?? 'P2'); ?>';
+            turnDisplay.textContent = playerName;
+        }
+
+        // ==============================================
+        // WINNER
+        // ==============================================
+        function showWinner(winnerId) {
+            const overlay = document.getElementById('winnerOverlay');
+            document.getElementById('winnerName').textContent = winnerId === USER_ID ? '🎉 You Won!' : '😔 You Lost';
+            overlay.classList.add('active');
+        }
+
+        // ==============================================
+        // TOAST
+        // ==============================================
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toastMessage');
+            msg.textContent = message;
+            toast.className = `toast-zupee ${type} show`;
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ==============================================
+        // INIT
+        // ==============================================
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        renderBoard();
+        updateTurnDisplay();
+        startPolling();
     </script>
 </body>
 </html>
