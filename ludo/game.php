@@ -881,7 +881,7 @@ $USE_WEBSOCKET = false; // Use polling for shared hosting
                 stopTimer();
                 rollBtn.disabled = true;
 
-                fetch(basePath + '/api/v1/game?action=roll', {
+                fetch(basePath + '/api/game?action=roll', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
