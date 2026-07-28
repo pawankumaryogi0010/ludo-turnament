@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * GAME.PHP - Ludo Game Page (FINAL FIXED)
+ * GAME.PHP - Ludo Game Page (XSS FIXED)
  * Ludo Tournament Platform - Complete Game Interface
- * Version: 5.0.2 - BOARD STATE FIX + ALL BUGS RESOLVED
+ * Version: 5.0.3 - XSS PROTECTION + ALL BUGS FIXED
  * ======================================================
  */
 
@@ -72,13 +72,12 @@ if ($basePath === '') {
     $basePath = '';
 }
 
-// Load board state from both JSON and individual columns
+// Load board state
 $boardState = json_decode($match['board_state'] ?? '{}', true);
 if (!is_array($boardState)) {
     $boardState = [];
 }
 
-// Ensure player1 and player2 exist in board state
 if (!isset($boardState['player1']) || !is_array($boardState['player1'])) {
     $boardState['player1'] = [];
 }
@@ -86,7 +85,7 @@ if (!isset($boardState['player2']) || !is_array($boardState['player2'])) {
     $boardState['player2'] = [];
 }
 
-// If board_state is empty, try loading from individual token columns
+// If board_state is empty, load from token columns
 if (empty($boardState['player1']) && empty($boardState['player2'])) {
     $boardState['player1'] = [
         'token1' => intval($match['p1_token1'] ?? -1),
@@ -102,26 +101,30 @@ if (empty($boardState['player1']) && empty($boardState['player2'])) {
     ];
 }
 
-// Ensure all 4 tokens exist for both players
+// Ensure all 4 tokens exist for both players with INTEGER values only
 for ($i = 1; $i <= 4; $i++) {
     if (!isset($boardState['player1']['token' . $i])) {
         $boardState['player1']['token' . $i] = -1;
+    } else {
+        $boardState['player1']['token' . $i] = intval($boardState['player1']['token' . $i]);
     }
     if (!isset($boardState['player2']['token' . $i])) {
         $boardState['player2']['token' . $i] = -1;
+    } else {
+        $boardState['player2']['token' . $i] = intval($boardState['player2']['token' . $i]);
     }
 }
 
-$boardStateJson = json_encode($boardState);
+// FIXED: XSS PROTECTION - Double encode for safe JavaScript injection
+// json_encode with JSON_HEX_TAG prevents </script> injection
+$boardStateJson = json_encode($boardState, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
 $currentTurnUserId = intval($match['current_turn_id'] ?? 0);
-// Fix: Properly determine current turn player number
 if ($currentTurnUserId === $player1Id) {
     $currentTurn = 1;
 } elseif ($currentTurnUserId === $player2Id) {
     $currentTurn = 2;
 } else {
-    // Default to player 1 if turn not set
     $currentTurn = 1;
 }
 
@@ -143,9 +146,8 @@ $matchStatus = $match['status'];
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- Use zupee-style.css for game page -->
-    <link rel="stylesheet" href="<?php echo $basePath; ?>/assets/css/zupee-style.css">
-    <link rel="manifest" href="<?php echo $basePath; ?>/manifest.json">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($basePath); ?>/assets/css/zupee-style.css">
+    <link rel="manifest" href="<?php echo htmlspecialchars($basePath); ?>/manifest.json">
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -192,9 +194,7 @@ $matchStatus = $match['status'];
             transition: background 0.2s;
         }
 
-        .game-header .back-btn:hover {
-            background: rgba(255,255,255,0.25);
-        }
+        .game-header .back-btn:hover { background: rgba(255,255,255,0.25); }
 
         .game-header .room-code {
             font-size: 16px;
@@ -210,12 +210,8 @@ $matchStatus = $match['status'];
             text-align: right;
         }
 
-        .game-header .player-info span {
-            color: white;
-            font-weight: 600;
-        }
+        .game-header .player-info span { color: white; font-weight: 600; }
 
-        /* Player Bars */
         .player-bars {
             display: flex;
             justify-content: space-between;
@@ -247,90 +243,50 @@ $matchStatus = $match['status'];
         }
 
         .player-bar .avatar-mini {
-            width: 36px;
-            height: 36px;
+            width: 36px; height: 36px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 16px;
-            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 16px; flex-shrink: 0;
         }
 
         .avatar-p1 { background: #EF4444; color: white; }
         .avatar-p2 { background: #3B82F6; color: white; }
 
-        .player-bar .bar-info {
-            flex: 1;
-            min-width: 0;
-        }
+        .player-bar .bar-info { flex: 1; min-width: 0; }
 
         .player-bar .bar-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: white;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: 13px; font-weight: 600; color: white;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
 
-        .player-bar .bar-tokens {
-            font-size: 10px;
-            color: rgba(255,255,255,0.7);
-        }
+        .player-bar .bar-tokens { font-size: 10px; color: rgba(255,255,255,0.7); }
+        .player-bar .bar-score { font-size: 14px; font-weight: 700; color: #FFD700; }
 
-        .player-bar .bar-score {
-            font-size: 14px;
-            font-weight: 700;
-            color: #FFD700;
-        }
-
-        /* Canvas Container */
         .game-canvas-container {
             flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 8px;
-            overflow: hidden;
-            position: relative;
+            display: flex; align-items: center; justify-content: center;
+            padding: 8px; overflow: hidden; position: relative;
         }
 
         .game-canvas-container canvas {
-            max-width: 100%;
-            max-height: 100%;
-            border-radius: 16px;
-            background: #1A1A2E;
+            max-width: 100%; max-height: 100%;
+            border-radius: 16px; background: #1A1A2E;
             box-shadow: 0 0 40px rgba(0,0,0,0.5), 0 0 80px rgba(91,45,142,0.3);
-            cursor: pointer;
-            touch-action: none;
+            cursor: pointer; touch-action: none;
         }
 
-        /* Dice Display */
         .dice-display {
-            position: absolute;
-            top: 50%;
-            left: 50%;
+            position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 70px;
-            height: 70px;
-            background: white;
-            border-radius: 16px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-size: 36px;
-            font-weight: 900;
-            color: #1A1A2E;
+            width: 70px; height: 70px;
+            background: white; border-radius: 16px;
+            display: none; align-items: center; justify-content: center;
+            font-size: 36px; font-weight: 900; color: #1A1A2E;
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            z-index: 20;
-            pointer-events: none;
+            z-index: 20; pointer-events: none;
         }
 
-        .dice-display.rolling {
-            animation: diceRoll 0.6s ease;
-        }
+        .dice-display.rolling { animation: diceRoll 0.6s ease; }
 
         @keyframes diceRoll {
             0% { transform: translate(-50%, -50%) rotate(0deg) scale(0.5); opacity: 0; }
@@ -338,179 +294,83 @@ $matchStatus = $match['status'];
             100% { transform: translate(-50%, -50%) rotate(720deg) scale(1); opacity: 1; }
         }
 
-        /* Footer */
         .game-footer {
             padding: 12px 16px;
             background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             flex-shrink: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-            z-index: 10;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 8px; z-index: 10;
         }
 
-        .game-footer .turn-text {
-            font-size: 12px;
-            color: rgba(255,255,255,0.8);
-        }
-
-        .game-footer .turn-text .highlight {
-            color: #FFD700;
-            font-weight: 700;
-        }
+        .game-footer .turn-text { font-size: 12px; color: rgba(255,255,255,0.8); }
+        .game-footer .turn-text .highlight { color: #FFD700; font-weight: 700; }
 
         .btn-roll {
             padding: 14px 32px;
             background: linear-gradient(135deg, #00A859, #22C55E);
-            color: white;
-            border: none;
-            border-radius: 30px;
-            font-weight: 700;
-            font-size: 16px;
-            cursor: pointer;
+            color: white; border: none; border-radius: 30px;
+            font-weight: 700; font-size: 16px; cursor: pointer;
             font-family: inherit;
             box-shadow: 0 4px 16px rgba(0,168,89,0.4);
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .btn-roll:hover {
-            transform: scale(1.05);
-            box-shadow: 0 6px 24px rgba(0,168,89,0.6);
-        }
+        .btn-roll:hover { transform: scale(1.05); box-shadow: 0 6px 24px rgba(0,168,89,0.6); }
+        .btn-roll:active { transform: scale(0.95); }
+        .btn-roll:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
 
-        .btn-roll:active {
-            transform: scale(0.95);
-        }
-
-        .btn-roll:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-
-        /* Timer */
         .timer-circle {
-            width: 48px;
-            height: 48px;
+            width: 48px; height: 48px;
             border-radius: 50%;
             border: 3px solid rgba(255,255,255,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             position: relative;
         }
 
-        .timer-circle .timer-text {
-            font-size: 16px;
-            font-weight: 700;
-            color: white;
-            z-index: 1;
-        }
-
+        .timer-circle .timer-text { font-size: 16px; font-weight: 700; color: white; z-index: 1; }
         .timer-circle.warning { border-color: #F59E0B; }
         .timer-circle.warning .timer-text { color: #F59E0B; }
         .timer-circle.danger { border-color: #EF4444; animation: pulse 0.5s infinite; }
         .timer-circle.danger .timer-text { color: #EF4444; }
 
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
 
-        /* Winner Overlay */
         .winner-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(10px);
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 30;
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 30;
         }
 
-        .winner-overlay.active {
-            display: flex;
-            animation: fadeIn 0.5s ease;
-        }
+        .winner-overlay.active { display: flex; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
+        .winner-overlay .trophy { font-size: 72px; animation: bounce 1s infinite; }
+        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-20px)} }
 
-        .winner-overlay .trophy {
-            font-size: 72px;
-            animation: bounce 1s infinite;
-        }
-
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-20px); }
-        }
-
-        .winner-overlay .win-title {
-            font-size: 28px;
-            font-weight: 800;
-            color: #FFD700;
-            margin-top: 12px;
-        }
-
-        .winner-overlay .win-amount {
-            font-size: 16px;
-            color: rgba(255,255,255,0.8);
-            margin-top: 4px;
-        }
-
-        .winner-overlay .win-amount span {
-            color: #FFD700;
-            font-weight: 700;
-        }
+        .winner-overlay .win-title { font-size: 28px; font-weight: 800; color: #FFD700; margin-top: 12px; }
+        .winner-overlay .win-amount { font-size: 16px; color: rgba(255,255,255,0.8); margin-top: 4px; }
+        .winner-overlay .win-amount span { color: #FFD700; font-weight: 700; }
 
         .winner-overlay .btn-back {
-            margin-top: 20px;
-            padding: 12px 32px;
-            background: white;
-            color: #5B2D8E;
-            border: none;
-            border-radius: 30px;
-            font-weight: 700;
-            font-size: 16px;
-            cursor: pointer;
-            font-family: inherit;
+            margin-top: 20px; padding: 12px 32px;
+            background: white; color: #5B2D8E;
+            border: none; border-radius: 30px;
+            font-weight: 700; font-size: 16px; cursor: pointer; font-family: inherit;
         }
 
-        /* Toast */
         .toast-zupee {
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
+            position: fixed; bottom: 100px; left: 50%;
             transform: translateX(-50%) translateY(20px);
-            padding: 12px 24px;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 14px;
-            z-index: 2000;
-            opacity: 0;
-            transition: all 0.3s ease;
-            pointer-events: none;
-            white-space: nowrap;
+            padding: 12px 24px; border-radius: 30px;
+            font-weight: 600; font-size: 14px; z-index: 2000;
+            opacity: 0; transition: all 0.3s ease;
+            pointer-events: none; white-space: nowrap;
         }
 
-        .toast-zupee.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
+        .toast-zupee.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .toast-zupee.success { background: #D1FAE5; color: #00A859; }
         .toast-zupee.error { background: #FEE2E2; color: #EF4444; }
         .toast-zupee.info { background: #E0E7FF; color: #3730A3; }
@@ -528,16 +388,12 @@ $matchStatus = $match['status'];
 <body>
     <div class="game-wrapper">
 
-        <!-- Header -->
         <div class="game-header">
             <a href="dashboard.php" class="back-btn">← Back</a>
             <div class="room-code">🔑 <?php echo htmlspecialchars($match['room_code']); ?></div>
-            <div class="player-info">
-                <?php echo $myName; ?> <span>vs</span> <?php echo $opponentName; ?>
-            </div>
+            <div class="player-info"><?php echo $myName; ?> <span>vs</span> <?php echo $opponentName; ?></div>
         </div>
 
-        <!-- Player Bars -->
         <div class="player-bars">
             <div class="player-bar <?php echo $currentTurn === 1 ? 'active-turn' : ''; ?>" id="player1Bar">
                 <div class="avatar-mini avatar-p1"><?php echo strtoupper(substr($match['player1_name'] ?? $match['p1_username'] ?? 'P1', 0, 1)); ?></div>
@@ -557,7 +413,6 @@ $matchStatus = $match['status'];
             </div>
         </div>
 
-        <!-- Game Canvas -->
         <div class="game-canvas-container">
             <canvas id="ludoCanvas"></canvas>
             <div class="dice-display" id="diceDisplay">1</div>
@@ -569,7 +424,6 @@ $matchStatus = $match['status'];
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="game-footer">
             <div class="turn-text">
                 Turn: <span class="highlight" id="turnDisplay">
@@ -586,9 +440,7 @@ $matchStatus = $match['status'];
 
     </div>
 
-    <div class="toast-zupee" id="toast">
-        <span id="toastMessage"></span>
-    </div>
+    <div class="toast-zupee" id="toast"><span id="toastMessage"></span></div>
 
     <script>
         // ==============================================
@@ -598,13 +450,13 @@ $matchStatus = $match['status'];
         const USER_ID = <?php echo $userId; ?>;
         const PLAYER_NUMBER = <?php echo $playerNumber; ?>;
         const CSRF_TOKEN = '<?php echo $csrf_token; ?>';
-        const API_BASE = '<?php echo $basePath; ?>/api/game.php';
+        const API_BASE = '<?php echo htmlspecialchars($basePath); ?>/api/game.php';
         const OPPONENT_NAME = '<?php echo $opponentName; ?>';
         const MY_NAME = '<?php echo $myName; ?>';
         const INITIAL_DICE = <?php echo $initialDiceValue; ?>;
         const MATCH_STATUS = '<?php echo $matchStatus; ?>';
 
-        // FIXED: Load board state from PHP
+        // FIXED: XSS SAFE - Board state loaded with JSON_HEX_TAG protection
         let boardState = <?php echo $boardStateJson; ?>;
         let currentTurn = <?php echo $currentTurn; ?>;
         let isGameOver = <?php echo $isGameOver ? 'true' : 'false'; ?>;
@@ -660,19 +512,16 @@ $matchStatus = $match['status'];
 
             ctx.clearRect(0, 0, size, size);
 
-            // Background
             const bg = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
             bg.addColorStop(0, '#1A1A2E');
             bg.addColorStop(1, '#0A0E1A');
             ctx.fillStyle = bg;
             ctx.fillRect(0, 0, size, size);
 
-            // Border
             ctx.strokeStyle = 'rgba(251,191,36,0.2)';
             ctx.lineWidth = 2;
             ctx.strokeRect(p, p, size - 2*p, size - 2*p);
 
-            // Grid
             ctx.strokeStyle = 'rgba(255,255,255,0.03)';
             ctx.lineWidth = 1;
             for (let i = 0; i < 15; i++) {
@@ -681,7 +530,6 @@ $matchStatus = $match['status'];
                 ctx.beginPath(); ctx.moveTo(p, pos); ctx.lineTo(size - p, pos); ctx.stroke();
             }
 
-            // Home bases
             const homeColors = [
                 { x: p, y: p, color: '#EF4444' },
                 { x: size - p - 6*cs, y: p, color: '#3B82F6' },
@@ -696,14 +544,12 @@ $matchStatus = $match['status'];
                 ctx.strokeRect(h.x, h.y, 6*cs, 6*cs);
             });
 
-            // Center
             ctx.fillStyle = 'rgba(251,191,36,0.05)';
             ctx.fillRect(p + 6*cs, p + 6*cs, 2*cs, 2*cs);
             ctx.strokeStyle = 'rgba(251,191,36,0.1)';
             ctx.lineWidth = 1;
             ctx.strokeRect(p + 6*cs, p + 6*cs, 2*cs, 2*cs);
 
-            // Draw tokens
             const players = [
                 { data: boardState.player1 || {}, color: '#EF4444' },
                 { data: boardState.player2 || {}, color: '#3B82F6' }
@@ -747,7 +593,6 @@ $matchStatus = $match['status'];
                 }
             });
 
-            // Update player bars
             updatePlayerBars();
         }
 
@@ -775,10 +620,7 @@ $matchStatus = $match['status'];
         }
 
         function stopPolling() {
-            if (pollInterval) {
-                clearInterval(pollInterval);
-                pollInterval = null;
-            }
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
         }
 
         async function pollGameState() {
@@ -791,17 +633,14 @@ $matchStatus = $match['status'];
                 const match = data.data.match;
                 const newBoardState = data.data.board;
                 
-                // Update board state
                 if (newBoardState && newBoardState.player1 && newBoardState.player2) {
                     boardState = newBoardState;
                 }
 
-                // FIXED: current_turn from API is player number (1 or 2)
                 currentTurn = match.current_turn || 1;
                 isGameOver = (match.status === 'completed');
                 lastDiceValue = parseInt(match.dice_value || 0);
 
-                // Ensure board state integrity
                 if (!boardState.player1) boardState.player1 = {};
                 if (!boardState.player2) boardState.player2 = {};
                 for (let i = 1; i <= 4; i++) {
@@ -812,7 +651,6 @@ $matchStatus = $match['status'];
                 renderBoard();
                 updateTurnDisplay();
 
-                // FIXED: Determine if player can roll
                 const isMyTurn = (currentTurn === PLAYER_NUMBER);
                 canRoll = isMyTurn && lastDiceValue === 0 && !isGameOver;
                 document.getElementById('rollBtn').disabled = !canRoll;
@@ -864,7 +702,7 @@ $matchStatus = $match['status'];
                 if (data.success) {
                     lastDiceValue = data.data.dice_value;
                     showDiceAnimation(lastDiceValue);
-                    showToast(`🎲 You rolled ${lastDiceValue}!`, 'info');
+                    showToast('🎲 You rolled ' + lastDiceValue + '!', 'info');
 
                     if (data.data.extra_turn) {
                         setTimeout(() => {
@@ -915,10 +753,7 @@ $matchStatus = $match['status'];
         }
 
         function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
             document.getElementById('timerCircle').classList.remove('warning', 'danger');
         }
 
@@ -936,7 +771,6 @@ $matchStatus = $match['status'];
         function showWinner(winnerId) {
             const overlay = document.getElementById('winnerOverlay');
             const nameEl = document.getElementById('winnerName');
-            const amountEl = document.getElementById('winnerAmount');
             
             if (winnerId == USER_ID) {
                 nameEl.textContent = '🎉 You Won!';
@@ -957,7 +791,7 @@ $matchStatus = $match['status'];
             const msg = document.getElementById('toastMessage');
             if (!toast || !msg) return;
             msg.textContent = message;
-            toast.className = `toast-zupee ${type} show`;
+            toast.className = 'toast-zupee ' + type + ' show';
             clearTimeout(window._toastTimer);
             window._toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
         }
@@ -973,19 +807,13 @@ $matchStatus = $match['status'];
 
             if (!isGameOver) {
                 startPolling();
-                if (currentTurn === PLAYER_NUMBER) {
-                    startTimer();
-                }
+                if (currentTurn === PLAYER_NUMBER) startTimer();
             } else {
                 document.getElementById('rollBtn').disabled = true;
                 showWinner(<?php echo $winnerId; ?>);
             }
             
-            console.log('🎲 Game initialized');
-            console.log('📊 Board state loaded:', boardState);
-            console.log('👤 Player:', PLAYER_NUMBER);
-            console.log('🎯 Current turn:', currentTurn);
-            console.log('🎲 Last dice:', lastDiceValue);
+            console.log('🎲 Game initialized - Board state:', boardState);
         }
 
         init();
