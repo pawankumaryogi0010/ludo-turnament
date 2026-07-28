@@ -1,19 +1,19 @@
 /**
- * SERVICE-WORKER.JS - Fixed for robust install & caching
- * - Caches static assets only
+ * SERVICE-WORKER.JS - Robust PWA Service Worker for Ludo
  * - Per-asset caching (no cache.addAll)
- * - Respects service-worker file scope (works in subfolder /ludo/)
- * - Offline fallback for navigations
+ * - Caches only static assets
+ * - Network-first for navigations with offline fallback
+ * - Works under subfolder scope (e.g. /ludo/)
  */
 
 const CACHE_NAME = 'ludo-cache-v2';
 
-// List of assets relative to the service worker's base path.
-// Keep these as relative names (no leading slash) — they'll be resolved to SERVICE_WORKER base path.
+// Assets relative to the service worker base path.
+// Ensure these files actually exist in your project (or remove items that don't).
 const ASSETS_RELATIVE = [
     '',                 // root (index)
     'index.php',
-    'offline.html',     // make sure this exists
+    'offline.html',     // create this file at same base path
     'manifest.json',
     'assets/css/style.css',
     'assets/js/audio-synth.js',
@@ -21,31 +21,22 @@ const ASSETS_RELATIVE = [
     'assets/js/websocket-client.js',
     'assets/js/invite-system.js',
     'assets/js/notifications.js',
-    // add icons/images used by manifest / notifications
     'assets/icons/icon-192x192.png',
     'assets/icons/icon-512x512.png',
     'assets/icons/badge-72x72.png'
 ];
 
-// Compute base path from this service worker's location (so it works under /ludo/ or root)
+// Derive base path from this service worker's URL so it works if installed at /ludo/
 const SW_PATH = self.location.pathname || '/service-worker.js';
-const BASE_PATH = (SW_PATH.endsWith('/service-worker.js')) ? SW_PATH.replace(/service-worker\.js$/, '') : (SW_PATH.replace(/service-worker\.js$/, ''));
+const BASE_PATH = SW_PATH.endsWith('/service-worker.js') ? SW_PATH.replace(/service-worker\.js$/, '') : SW_PATH.replace(/service-worker\.js$/, '');
 const normalizeUrl = (p) => {
-    // p may be '' (root) or path like 'index.php' or '/something'
     if (!p) return (BASE_PATH === '' || BASE_PATH === '/') ? '/' : BASE_PATH;
-    if (p.startsWith('/')) {
-        // absolute path on origin
-        return p;
-    }
-    // join base and p ensuring single slash
+    if (p.startsWith('/')) return p;
     if (BASE_PATH.endsWith('/')) return BASE_PATH + p;
     return BASE_PATH + '/' + p;
 };
-
-// Build full asset URLs to attempt to cache
 const ASSETS_TO_CACHE = ASSETS_RELATIVE.map(normalizeUrl);
 
-// Helper for logging
 function log() {
     try { console.log.apply(console, arguments); } catch (e) {}
 }
@@ -57,10 +48,8 @@ self.addEventListener('install', function(event) {
         const failures = [];
         await Promise.all(ASSETS_TO_CACHE.map(async (asset) => {
             try {
-                // Use same-origin credentials so server-side sessions/cookies (if needed) are included
                 const req = new Request(asset, { credentials: 'same-origin', cache: 'no-cache' });
                 const res = await fetch(req);
-                // Accept ok or opaque (no-cors) responses
                 if (!res || (!res.ok && res.type !== 'opaque')) {
                     throw new Error('Bad response: ' + (res && res.status));
                 }
@@ -76,7 +65,6 @@ self.addEventListener('install', function(event) {
         } else {
             log('✅ All assets cached successfully');
         }
-        // Activate worker immediately
         await self.skipWaiting();
     })());
 });
@@ -96,22 +84,19 @@ self.addEventListener('activate', function(event) {
     })());
 });
 
-// Fetch handler: Cache-first for static, Network-first for API/navigation with offline fallback
 self.addEventListener('fetch', function(event) {
     const request = event.request;
     const url = new URL(request.url);
 
-    // Only handle GET requests here
     if (request.method !== 'GET') {
         return event.respondWith(fetch(request));
     }
 
-    // Never cache API or dynamic endpoints — always go to network (but gracefully fallback)
+    // Never cache API / dynamic endpoints — network-first with JSON fallback
     if (url.pathname.includes('/api/') ||
         url.pathname.endsWith('/auth.php') ||
         url.pathname.endsWith('/wallet.php') ||
-        url.pathname.endsWith('/game.php') ||
-        url.pathname.includes('/api/')) {
+        url.pathname.endsWith('/game.php')) {
         return event.respondWith(
             fetch(request)
                 .then((networkResponse) => networkResponse)
@@ -119,32 +104,29 @@ self.addEventListener('fetch', function(event) {
         );
     }
 
-    // Navigation (page load) -> network-first, fallback to cache (offline.html) if network fails
+    // Navigation requests: network-first, fallback to cache/offline
     if (request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')) {
         return event.respondWith((async () => {
             try {
                 const networkResponse = await fetch(request);
-                // Optionally update cache for navigation pages (but beware dynamic pages)
                 if (networkResponse && (networkResponse.ok || networkResponse.type === 'opaque')) {
                     const cache = await caches.open(CACHE_NAME);
-                    try { await cache.put(request, networkResponse.clone()); } catch (e) { /* ignore cache put errors */ }
+                    try { await cache.put(request, networkResponse.clone()); } catch (e) { /* ignore put errors */ }
                 }
                 return networkResponse;
             } catch (err) {
-                // Network failed — try cache, then offline fallback
                 const cached = await caches.match(request);
                 if (cached) return cached;
-                const offline = await caches.match(normalizeUrl('offline.html')) || await caches.match('/');
+                const offline = await caches.match(normalizeUrl('offline.html')) || await caches.match(normalizeUrl(''));
                 return offline || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
             }
         })());
     }
 
-    // For other GET requests (static assets) -> cache-first, then network and populate cache
+    // Static assets: cache-first then network and populate cache
     event.respondWith((async () => {
         const cachedResponse = await caches.match(request);
         if (cachedResponse) {
-            // Update cache in background
             fetch(request).then(async (networkResponse) => {
                 if (networkResponse && (networkResponse.ok || networkResponse.type === 'opaque')) {
                     const cache = await caches.open(CACHE_NAME);
@@ -161,15 +143,13 @@ self.addEventListener('fetch', function(event) {
             }
             return networkResponse;
         } catch (err) {
-            // If asset not in cache and network failed, try offline.html as fallback for navigations, else respond 503/image placeholder
-            const offline = await caches.match(normalizeUrl('offline.html')) || await caches.match('/');
+            const offline = await caches.match(normalizeUrl('offline.html')) || await caches.match(normalizeUrl(''));
             if (offline) return offline;
             return new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
         }
     })());
 });
 
-// Push notifications
 self.addEventListener('push', function(event) {
     log('📨 Push received:', event);
     let data = {
@@ -207,7 +187,6 @@ self.addEventListener('push', function(event) {
     event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-// Notification click handling
 self.addEventListener('notificationclick', function(event) {
     log('📨 Notification click:', event);
     event.notification.close();
@@ -218,7 +197,6 @@ self.addEventListener('notificationclick', function(event) {
     event.waitUntil((async () => {
         const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
         for (const client of clientList) {
-            // Normalize both URLs ignoring trailing slashes
             if ((client.url || '').replace(/\/$/, '') === (urlToOpen || '').replace(/\/$/, '') && 'focus' in client) {
                 return client.focus();
             }
