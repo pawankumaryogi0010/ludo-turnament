@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * GAME_SYNC.PHP - Game State Sync Endpoint
+ * GAME_SYNC.PHP - Game State Sync Endpoint (FIXED)
  * Ludo Tournament Platform - Save Game State
- * Version: 1.0.0
+ * Version: 2.0.0 - STATUS VALIDATION + TURN VALIDATION FIX
  * ======================================================
  */
 
@@ -16,7 +16,6 @@ require_once dirname(__DIR__) . '/config/db.php';
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
-
 header('Access-Control-Allow-Origin: ' . BASE_URL);
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, X-CSRF-Token');
@@ -32,7 +31,7 @@ if (!isLoggedIn()) {
 }
 
 $userId = getCurrentUserId();
-$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
     case 'save_state':
@@ -43,9 +42,11 @@ switch ($action) {
         break;
     default:
         jsonResponse(false, 'Invalid action', [], 400);
-        break;
 }
 
+// ==============================================
+// SAVE GAME STATE
+// ==============================================
 function handleSaveState() {
     global $userId;
     
@@ -67,17 +68,13 @@ function handleSaveState() {
         
         $db->beginTransaction();
         
-        // BUG FIX: Fetch full match row (not just id) so we can validate current_turn below
+        // FIXED: Fetch full match row for validation
         $stmt = $conn->prepare("
             SELECT id, player1_id, player2_id, status FROM matches
-            WHERE id = :match_id
-            AND (player1_id = :user_id OR player2_id = :user_id)
+            WHERE id = :mid AND (player1_id = :uid OR player2_id = :uid)
             FOR UPDATE
         ");
-        $stmt->execute([
-            ':match_id' => $matchId,
-            ':user_id' => $userId
-        ]);
+        $stmt->execute([':mid' => $matchId, ':uid' => $userId]);
         
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$match) {
@@ -85,14 +82,13 @@ function handleSaveState() {
             jsonResponse(false, 'Not authorized for this match', [], 403);
         }
         
-        // BUG FIX: Client was allowed to set ANY status (including 'completed') with no
-        // server-side validation. Whitelist the allowed in-progress statuses only.
+        // FIXED: Whitelist allowed statuses
         $allowedStatuses = ['playing', 'paused'];
         $requestedStatus = $input['status'] ?? 'playing';
         $safeStatus = in_array($requestedStatus, $allowedStatuses, true) ? $requestedStatus : 'playing';
 
-        // BUG FIX: Validate current_turn belongs to the match
-        $validTurns = [$match['player1_id'] ?? 0, $match['player2_id'] ?? 0];
+        // FIXED: Validate current_turn belongs to the match
+        $validTurns = [intval($match['player1_id'] ?? 0), intval($match['player2_id'] ?? 0)];
         $requestedTurn = intval($input['current_turn'] ?? 0);
         $safeTurn = in_array($requestedTurn, $validTurns, true) ? $requestedTurn : ($validTurns[0] ?? 0);
 
@@ -100,39 +96,33 @@ function handleSaveState() {
         $stmt = $conn->prepare("
             UPDATE matches
             SET 
-                p1_token1 = :p1_token1,
-                p1_token2 = :p1_token2,
-                p1_token3 = :p1_token3,
-                p1_token4 = :p1_token4,
-                p1_home_count = :p1_home_count,
-                p2_token1 = :p2_token1,
-                p2_token2 = :p2_token2,
-                p2_token3 = :p2_token3,
-                p2_token4 = :p2_token4,
-                p2_home_count = :p2_home_count,
-                current_turn_id = :current_turn,
-                dice_value = :dice_value,
-                turn_number = :turn_number,
+                p1_token1 = :p1t1, p1_token2 = :p1t2, p1_token3 = :p1t3, p1_token4 = :p1t4,
+                p1_home_count = :p1hc,
+                p2_token1 = :p2t1, p2_token2 = :p2t2, p2_token3 = :p2t3, p2_token4 = :p2t4,
+                p2_home_count = :p2hc,
+                current_turn_id = :turn,
+                dice_value = :dice,
+                turn_number = :tnum,
                 status = :status,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = :match_id
+            WHERE id = :mid
         ");
         $stmt->execute([
-            ':p1_token1' => $input['p1_tokens'][0] ?? -1,
-            ':p1_token2' => $input['p1_tokens'][1] ?? -1,
-            ':p1_token3' => $input['p1_tokens'][2] ?? -1,
-            ':p1_token4' => $input['p1_tokens'][3] ?? -1,
-            ':p1_home_count' => $input['p1_home_count'] ?? 0,
-            ':p2_token1' => $input['p2_tokens'][0] ?? -1,
-            ':p2_token2' => $input['p2_tokens'][1] ?? -1,
-            ':p2_token3' => $input['p2_tokens'][2] ?? -1,
-            ':p2_token4' => $input['p2_tokens'][3] ?? -1,
-            ':p2_home_count' => $input['p2_home_count'] ?? 0,
-            ':current_turn' => $safeTurn,
-            ':dice_value' => $input['dice_value'] ?? 0,
-            ':turn_number' => $input['turn_number'] ?? 0,
+            ':p1t1' => $input['p1_tokens'][0] ?? -1,
+            ':p1t2' => $input['p1_tokens'][1] ?? -1,
+            ':p1t3' => $input['p1_tokens'][2] ?? -1,
+            ':p1t4' => $input['p1_tokens'][3] ?? -1,
+            ':p1hc' => $input['p1_home_count'] ?? 0,
+            ':p2t1' => $input['p2_tokens'][0] ?? -1,
+            ':p2t2' => $input['p2_tokens'][1] ?? -1,
+            ':p2t3' => $input['p2_tokens'][2] ?? -1,
+            ':p2t4' => $input['p2_tokens'][3] ?? -1,
+            ':p2hc' => $input['p2_home_count'] ?? 0,
+            ':turn' => $safeTurn,
+            ':dice' => $input['dice_value'] ?? 0,
+            ':tnum' => $input['turn_number'] ?? 0,
             ':status' => $safeStatus,
-            ':match_id' => $matchId
+            ':mid' => $matchId
         ]);
         
         $db->commit();
@@ -150,6 +140,9 @@ function handleSaveState() {
     }
 }
 
+// ==============================================
+// GET GAME STATE
+// ==============================================
 function handleGetState() {
     global $userId;
     
@@ -169,9 +162,9 @@ function handleGetState() {
                 p1_token1, p1_token2, p1_token3, p1_token4, p1_home_count,
                 p2_token1, p2_token2, p2_token3, p2_token4, p2_home_count
             FROM matches
-            WHERE id = :match_id
+            WHERE id = :mid
         ");
-        $stmt->execute([':match_id' => $matchId]);
+        $stmt->execute([':mid' => $matchId]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$match) {
