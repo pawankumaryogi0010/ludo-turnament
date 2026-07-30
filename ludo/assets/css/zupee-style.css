@@ -1,13 +1,12 @@
 /**
  * ======================================================
- * ZUPPEE-STYLE.CSS - Green Theme UI
+ * ZUPPEE-STYLE.CSS - Green Theme UI (FINAL)
  * Ludo Tournament Platform - Premium Gaming Theme
- * Version: 2.0.0 - GREEN THEME + VERTICAL CARDS
+ * Version: 2.1.0 - BOTTOM NAV FIXED + QUICK PLAY REMOVED
  * ======================================================
  */
 
 :root {
-    /* Green Theme Colors */
     --zupee-bg: #1A8F5E;
     --zupee-card: #07B068;
     --zupee-card-hover: #0ABD75;
@@ -115,7 +114,7 @@ body {
 .main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 0 16px 80px;
+    padding: 0 16px 0 16px;
 }
 
 .page { display: none; }
@@ -191,80 +190,7 @@ body {
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .section-title { font-size: 18px; font-weight: 700; color: var(--zupee-white); }
 
-/* ==============================================
-   QUICK PLAY CARDS - VERTICAL LAYOUT (FIXED)
-   ============================================== */
-.quick-play-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.quick-play-card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: var(--zupee-card);
-    border-radius: var(--zupee-radius-md);
-    padding: 16px 20px;
-    box-shadow: var(--zupee-shadow);
-    cursor: pointer;
-    transition: var(--zupee-transition);
-    border: 2px solid transparent;
-}
-
-.quick-play-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--zupee-gold);
-}
-
-.quick-play-card.featured {
-    border-color: var(--zupee-gold);
-    background: #0ABD75;
-}
-
-.quick-play-card.premium {
-    border-color: rgba(255,255,255,0.3);
-    background: #0ABD75;
-}
-
-.quick-play-card .qp-icon {
-    font-size: 36px;
-    width: 50px;
-    height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255,255,255,0.15);
-    border-radius: var(--zupee-radius-md);
-    flex-shrink: 0;
-}
-
-.quick-play-card .qp-info {
-    flex: 1;
-}
-
-.quick-play-card .qp-name {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--zupee-white);
-    display: block;
-}
-
-.quick-play-card .qp-entry {
-    font-size: 13px;
-    color: var(--zupee-text-secondary);
-}
-
-.quick-play-card .qp-prize {
-    font-size: 20px;
-    font-weight: 800;
-    color: var(--zupee-gold);
-    text-align: right;
-    white-space: nowrap;
-}
-
-/* TOURNAMENT CARDS */
+/* TOURNAMENT CARDS - VERTICAL LAYOUT */
 .tournament-grid-zupee {
     display: flex;
     flex-direction: column;
@@ -406,15 +332,25 @@ body {
 }
 .pm-item:hover { background: #0ABD75; }
 
-/* BOTTOM NAV */
+/* ==============================================
+   BOTTOM NAV - FIXED (No movement)
+   ============================================== */
 .bottom-nav-zupee {
-    display: flex; justify-content: space-around; align-items: center;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
     padding: 8px 4px 12px;
     background: var(--zupee-card);
     border-top: 1px solid rgba(255,255,255,0.1);
-    position: sticky; bottom: 0; z-index: 100;
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
     flex-shrink: 0;
-    max-width: 480px; margin: 0 auto; width: 100%;
+    max-width: 480px;
+    width: 100%;
+    height: 68px;
 }
 .bn-item {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -489,7 +425,7 @@ body {
 
 /* TOAST */
 .toast-zupee {
-    position: fixed; bottom: 90px; left: 50%;
+    position: fixed; bottom: 100px; left: 50%;
     transform: translateX(-50%) translateY(20px);
     padding: 12px 24px; border-radius: var(--zupee-radius-full);
     font-weight: 600; font-size: 14px; z-index: 2000;
@@ -504,4 +440,5 @@ body {
 @media (max-width: 480px) {
     .how-to-play { flex-direction: column; }
     .profile-stats-zupee { grid-template-columns: repeat(2, 1fr); }
+    .bottom-nav-zupee { max-width: 100%; }
 }
