@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * GAME.PHP - Authoritative Game API (FINAL FIXED)
+ * GAME.PHP - Authoritative Game API (1vs1 + 1vs4)
  * Ludo Tournament Platform - Server Authority
- * Version: 2.0.0 - NULL TURN + ALL BUGS FIXED
+ * Version: 2.1.0 - 4 PLAYER SUPPORT
  * ======================================================
  */
 
@@ -19,7 +19,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 
-// CORS
 $allowedOrigins = [
     rtrim(BASE_URL, '/'),
     'http://localhost',
@@ -41,24 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// AUTHENTICATION
 if (!isLoggedIn()) {
     jsonResponse(false, 'Please login first', [], 401);
 }
 
 $userId = getCurrentUserId();
 
-// INPUT & ROUTING
 $action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
-// CSRF Validation (skip for get_state polling)
 $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 if (!CSRFToken::validate($csrfToken) && $action !== 'get_state') {
     jsonResponse(false, 'Invalid CSRF token', [], 403);
 }
 
-// Release session lock for polling endpoints
 if ($action === 'get_state') {
     session_write_close();
 }
@@ -96,16 +91,16 @@ function handleGetGameState(int $userId): void
         $conn = $db->getConnection();
 
         $stmt = $conn->prepare("
-            SELECT
-                m.id, m.room_code, m.status, m.current_turn_id, m.dice_value,
-                m.turn_number, m.entry_fee, m.prize_pool, m.board_state,
-                m.player1_id, m.player2_id, m.player1_name, m.player2_name,
-                m.winner_id, m.winning_amount, m.updated_at,
-                u1.username as player1_username,
-                u2.username as player2_username
+            SELECT m.*, 
+                   u1.username as player1_username,
+                   u2.username as player2_username,
+                   u3.username as player3_username,
+                   u4.username as player4_username
             FROM matches m
             LEFT JOIN users u1 ON m.player1_id = u1.id
             LEFT JOIN users u2 ON m.player2_id = u2.id
+            LEFT JOIN users u3 ON m.player3_id = u3.id
+            LEFT JOIN users u4 ON m.player4_id = u4.id
             WHERE m.id = :match_id
         ");
         $stmt->execute([':match_id' => $matchId]);
@@ -115,27 +110,45 @@ function handleGetGameState(int $userId): void
             jsonResponse(false, 'Match not found', [], 404);
         }
 
-        $player1Id = intval($match['player1_id'] ?? 0);
-        $player2Id = intval($match['player2_id'] ?? 0);
-        
-        if ($player1Id !== $userId && $player2Id !== $userId) {
+        // Get all player IDs
+        $playerIds = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $pid = intval($match["player{$i}_id"] ?? 0);
+            if ($pid > 0) $playerIds[] = $pid;
+        }
+
+        if (!in_array($userId, $playerIds)) {
             jsonResponse(false, 'Not authorized for this match', [], 403);
         }
 
         $boardState = json_decode($match['board_state'] ?? '{}', true) ?: [];
         
-        if (!isset($boardState['player1'])) $boardState['player1'] = [];
-        if (!isset($boardState['player2'])) $boardState['player2'] = [];
+        // Ensure all players exist in board state
+        for ($i = 1; $i <= 4; $i++) {
+            if (!isset($boardState["player{$i}"])) $boardState["player{$i}"] = [];
+        }
         
-        // FIXED: Properly determine current turn as player number (1 or 2)
+        // Determine current turn as player number
         $currentTurnUserId = intval($match['current_turn_id'] ?? 0);
-        if ($currentTurnUserId === $player1Id) {
-            $currentTurn = 1;
-        } elseif ($currentTurnUserId === $player2Id) {
-            $currentTurn = 2;
-        } else {
-            // If no turn set (match just created), default to player 1
-            $currentTurn = 1;
+        $currentTurn = 1;
+        for ($i = 1; $i <= 4; $i++) {
+            if ($currentTurnUserId === intval($match["player{$i}_id"] ?? 0)) {
+                $currentTurn = $i;
+                break;
+            }
+        }
+
+        // Build player list
+        $players = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $pid = intval($match["player{$i}_id"] ?? 0);
+            if ($pid > 0) {
+                $players["player{$i}"] = [
+                    'id' => $pid,
+                    'name' => $match["player{$i}_name"] ?? $match["player{$i}_username"] ?? "Player {$i}",
+                    'is_me' => ($pid === $userId),
+                ];
+            }
         }
 
         jsonResponse(true, 'Game state retrieved', [
@@ -153,19 +166,9 @@ function handleGetGameState(int $userId): void
                 'winning_amount' => $match['winning_amount'] ? floatval($match['winning_amount']) : null,
                 'is_my_turn' => ($currentTurnUserId === $userId),
                 'has_rolled' => (intval($match['dice_value'] ?? 0) > 0),
+                'player_count' => count($playerIds),
             ],
-            'players' => [
-                'player1' => [
-                    'id' => $player1Id,
-                    'name' => $match['player1_name'] ?? $match['player1_username'] ?? 'Player 1',
-                    'is_me' => ($player1Id === $userId),
-                ],
-                'player2' => [
-                    'id' => $player2Id,
-                    'name' => $match['player2_name'] ?? $match['player2_username'] ?? 'Player 2',
-                    'is_me' => ($player2Id === $userId),
-                ],
-            ],
+            'players' => $players,
             'board' => $boardState,
             'updated_at' => $match['updated_at'],
         ]);
@@ -176,7 +179,7 @@ function handleGetGameState(int $userId): void
 }
 
 // ==============================================
-// ROLL DICE (SERVER AUTHORITY)
+// ROLL DICE (1vs4 SUPPORT)
 // ==============================================
 function handleRollDice(int $userId, array $input): void
 {
@@ -193,9 +196,7 @@ function handleRollDice(int $userId, array $input): void
         $db->beginTransaction();
 
         $stmt = $conn->prepare("
-            SELECT id, status, current_turn_id, player1_id, player2_id,
-                   board_state, turn_number, prize_pool, entry_fee, room_code
-            FROM matches WHERE id = :match_id FOR UPDATE
+            SELECT * FROM matches WHERE id = :match_id FOR UPDATE
         ");
         $stmt->execute([':match_id' => $matchId]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -205,47 +206,41 @@ function handleRollDice(int $userId, array $input): void
             jsonResponse(false, 'Match not found', [], 404);
         }
 
-        if ($match['status'] !== 'playing' && $match['status'] !== 'ready') {
+        if (!in_array($match['status'], ['playing', 'ready'])) {
             $db->rollback();
-            jsonResponse(false, 'Match is not in playable state', [], 400);
+            jsonResponse(false, 'Match not in playable state', [], 400);
         }
 
-        if ($match['status'] === 'completed') {
-            $db->rollback();
-            jsonResponse(false, 'Match already completed', [], 400);
-        }
-
-        // FIXED: Proper turn validation
         $currentTurnId = intval($match['current_turn_id'] ?? 0);
         if ($currentTurnId !== $userId) {
             $db->rollback();
             jsonResponse(false, 'Not your turn', [], 403);
         }
 
-        // Check if player is in match
-        $player1Id = intval($match['player1_id'] ?? 0);
-        $player2Id = intval($match['player2_id'] ?? 0);
-        
-        if ($player1Id !== $userId && $player2Id !== $userId) {
+        // Get all active player IDs
+        $activePlayers = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $pid = intval($match["player{$i}_id"] ?? 0);
+            if ($pid > 0) $activePlayers[] = $pid;
+        }
+
+        if (!in_array($userId, $activePlayers)) {
             $db->rollback();
             jsonResponse(false, 'Player not in this match', [], 403);
         }
 
-        // SERVER GENERATES DICE VALUE
+        // SERVER GENERATES DICE
         $diceValue = rand(1, 6);
         $extraTurn = ($diceValue === 6);
 
-        // Check consecutive sixes (anti-cheat)
+        // Anti-cheat: consecutive sixes check
         $stmt = $conn->prepare("
-            SELECT COUNT(*) as six_count
-            FROM game_actions
-            WHERE match_id = :match_id
-            AND user_id = :user_id
-            AND action_type = 'dice_roll'
-            AND dice_value = 6
+            SELECT COUNT(*) FROM game_actions
+            WHERE match_id = :mid AND user_id = :uid 
+            AND action_type = 'dice_roll' AND dice_value = 6
             AND created_at > DATE_SUB(NOW(), INTERVAL 10 SECOND)
         ");
-        $stmt->execute([':match_id' => $matchId, ':user_id' => $userId]);
+        $stmt->execute([':mid' => $matchId, ':uid' => $userId]);
         $sixCount = intval($stmt->fetchColumn());
 
         if ($sixCount >= 2 && $diceValue === 6) {
@@ -253,61 +248,54 @@ function handleRollDice(int $userId, array $input): void
             $diceValue = rand(1, 5);
         }
 
-        // Determine next turn
-        $nextTurnId = $extraTurn ? $userId : ($player1Id === $userId ? $player2Id : $player1Id);
+        // Determine next turn (cycle through active players)
+        $currentIndex = array_search($userId, $activePlayers);
+        $nextIndex = $extraTurn ? $currentIndex : ($currentIndex + 1) % count($activePlayers);
+        $nextTurnId = $activePlayers[$nextIndex];
 
         // Update match
         $stmt = $conn->prepare("
-            UPDATE matches SET
-                dice_value = :dice_value,
-                current_turn_id = :next_turn_id,
-                turn_number = turn_number + 1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :match_id
+            UPDATE matches SET dice_value = :dice, current_turn_id = :next_turn,
+            turn_number = turn_number + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :mid
         ");
-        $stmt->execute([
-            ':dice_value' => $diceValue,
-            ':next_turn_id' => $nextTurnId,
-            ':match_id' => $matchId
-        ]);
+        $stmt->execute([':dice' => $diceValue, ':next_turn' => $nextTurnId, ':mid' => $matchId]);
 
         // Log action
         $stmt = $conn->prepare("
             INSERT INTO game_actions (match_id, user_id, action_type, dice_value, metadata, created_at)
-            VALUES (:match_id, :user_id, 'dice_roll', :dice_value, :metadata, CURRENT_TIMESTAMP)
+            VALUES (:mid, :uid, 'dice_roll', :dice, :meta, CURRENT_TIMESTAMP)
         ");
-        $stmt->execute([
-            ':match_id' => $matchId,
-            ':user_id' => $userId,
-            ':dice_value' => $diceValue,
-            ':metadata' => json_encode(['extra_turn' => $extraTurn, 'next_turn' => $nextTurnId, 'six_count' => $sixCount])
-        ]);
+        $stmt->execute([':mid' => $matchId, ':uid' => $userId, ':dice' => $diceValue, ':meta' => json_encode(['extra_turn' => $extraTurn])]);
 
         $db->commit();
 
-        // FIXED: Return current_turn as player number
-        $responseCurrentTurn = ($nextTurnId === $player1Id) ? 1 : 2;
+        // Determine current turn as player number
+        $responseTurn = 1;
+        for ($i = 1; $i <= 4; $i++) {
+            if ($nextTurnId === intval($match["player{$i}_id"] ?? 0)) {
+                $responseTurn = $i;
+                break;
+            }
+        }
 
-        jsonResponse(true, 'Dice rolled successfully', [
+        jsonResponse(true, 'Dice rolled', [
             'match_id' => $matchId,
             'dice_value' => $diceValue,
             'extra_turn' => $extraTurn,
-            'current_turn' => $responseCurrentTurn,
-            'next_turn_id' => $nextTurnId,
+            'current_turn' => $responseTurn,
             'action_id' => $conn->lastInsertId(),
             'turn_number' => intval($match['turn_number']) + 1,
         ]);
 
     } catch (PDOException $e) {
-        if ($db->inTransaction()) {
-            $db->rollback();
-        }
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        if ($db->inTransaction()) $db->rollback();
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
 // ==============================================
-// MOVE TOKEN (SERVER VALIDATES)
+// MOVE TOKEN (1vs4 SUPPORT)
 // ==============================================
 function handleMoveToken(int $userId, array $input): void
 {
@@ -322,29 +310,18 @@ function handleMoveToken(int $userId, array $input): void
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
-
         $db->beginTransaction();
 
-        $stmt = $conn->prepare("
-            SELECT id, status, current_turn_id, player1_id, player2_id,
-                   board_state, dice_value
-            FROM matches WHERE id = :match_id FOR UPDATE
-        ");
-        $stmt->execute([':match_id' => $matchId]);
+        $stmt = $conn->prepare("SELECT * FROM matches WHERE id = :mid FOR UPDATE");
+        $stmt->execute([':mid' => $matchId]);
         $match = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$match) {
+        if (!$match || $match['status'] !== 'playing') {
             $db->rollback();
-            jsonResponse(false, 'Match not found', [], 404);
+            jsonResponse(false, 'Match not in playing state', [], 400);
         }
 
-        if ($match['status'] !== 'playing') {
-            $db->rollback();
-            jsonResponse(false, 'Match is not in playing state', [], 400);
-        }
-
-        $currentTurnId = intval($match['current_turn_id'] ?? 0);
-        if ($currentTurnId !== $userId) {
+        if (intval($match['current_turn_id'] ?? 0) !== $userId) {
             $db->rollback();
             jsonResponse(false, 'Not your turn', [], 403);
         }
@@ -355,175 +332,84 @@ function handleMoveToken(int $userId, array $input): void
             jsonResponse(false, 'Roll dice first', [], 400);
         }
 
-        $player1Id = intval($match['player1_id'] ?? 0);
-        $player2Id = intval($match['player2_id'] ?? 0);
-        $playerNumber = ($player1Id === $userId) ? 1 : 2;
-        $boardState = json_decode($match['board_state'] ?? '{}', true) ?: [];
+        // Determine player number
+        $playerNumber = 1;
+        for ($i = 1; $i <= 4; $i++) {
+            if ($userId === intval($match["player{$i}_id"] ?? 0)) {
+                $playerNumber = $i;
+                break;
+            }
+        }
 
+        $boardState = json_decode($match['board_state'] ?? '{}', true) ?: [];
         $validMove = validateTokenMove($boardState, $playerNumber, $tokenNumber, $diceValue, $targetPosition);
 
         if (!$validMove) {
             $db->rollback();
-            jsonResponse(false, 'Invalid move - Server validation failed', [], 400);
+            jsonResponse(false, 'Invalid move', [], 400);
         }
 
         $playerKey = 'player' . $playerNumber;
         $tokenKey = 'token' . $tokenNumber;
-
-        if (!isset($boardState[$playerKey])) {
-            $boardState[$playerKey] = [];
-        }
-
-        $oldPosition = $boardState[$playerKey][$tokenKey] ?? -1;
+        if (!isset($boardState[$playerKey])) $boardState[$playerKey] = [];
         $boardState[$playerKey][$tokenKey] = $targetPosition;
 
-        // Check if player has won
+        // Check winner
         $winnerId = checkWinner($boardState, $matchId);
 
         if ($winnerId) {
-            $stmt = $conn->prepare("
-                UPDATE matches SET
-                    status = 'completed',
-                    winner_id = :winner_id,
-                    winning_amount = :winning_amount,
-                    completed_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :match_id
-            ");
-            $stmt->execute([
-                ':winner_id' => $winnerId,
-                ':winning_amount' => floatval($match['prize_pool'] ?? 0),
-                ':match_id' => $matchId
-            ]);
-
+            $stmt = $conn->prepare("UPDATE matches SET status = 'completed', winner_id = :wid, winning_amount = :wamt, completed_at = CURRENT_TIMESTAMP WHERE id = :mid");
+            $stmt->execute([':wid' => $winnerId, ':wamt' => floatval($match['prize_pool'] ?? 0), ':mid' => $matchId]);
             $db->commit();
             processSettlement($winnerId, $matchId, floatval($match['prize_pool'] ?? 0));
-
-            jsonResponse(true, 'Game completed! Winner declared by server.', [
-                'match_id' => $matchId,
-                'winner_id' => $winnerId,
-                'winning_amount' => floatval($match['prize_pool'] ?? 0),
-                'game_over' => true,
-                'board_state' => $boardState,
-            ]);
+            jsonResponse(true, 'Game completed!', ['match_id' => $matchId, 'winner_id' => $winnerId, 'game_over' => true]);
             return;
         }
 
-        // Update board state
-        $nextTurnId = ($currentTurnId === $player1Id) ? $player2Id : $player1Id;
-        
-        $stmt = $conn->prepare("
-            UPDATE matches SET
-                board_state = :board_state,
-                dice_value = 0,
-                current_turn_id = :next_turn_id,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :match_id
-        ");
-        $stmt->execute([
-            ':board_state' => json_encode($boardState),
-            ':next_turn_id' => $nextTurnId,
-            ':match_id' => $matchId
-        ]);
+        // Get active players for next turn
+        $activePlayers = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $pid = intval($match["player{$i}_id"] ?? 0);
+            if ($pid > 0) $activePlayers[] = $pid;
+        }
+        $currentIndex = array_search($userId, $activePlayers);
+        $nextIndex = ($currentIndex + 1) % count($activePlayers);
+        $nextTurnId = $activePlayers[$nextIndex];
 
-        // Log action
-        $stmt = $conn->prepare("
-            INSERT INTO game_actions (match_id, user_id, action_type, token_number, from_position, to_position, metadata, created_at)
-            VALUES (:match_id, :user_id, 'token_move', :token_number, :from_position, :to_position, :metadata, CURRENT_TIMESTAMP)
-        ");
-        $stmt->execute([
-            ':match_id' => $matchId,
-            ':user_id' => $userId,
-            ':token_number' => $tokenNumber,
-            ':from_position' => $oldPosition,
-            ':to_position' => $targetPosition,
-            ':metadata' => json_encode(['player' => $playerNumber])
-        ]);
+        $stmt = $conn->prepare("UPDATE matches SET board_state = :bs, dice_value = 0, current_turn_id = :nt, updated_at = CURRENT_TIMESTAMP WHERE id = :mid");
+        $stmt->execute([':bs' => json_encode($boardState), ':nt' => $nextTurnId, ':mid' => $matchId]);
+
+        $stmt = $conn->prepare("INSERT INTO game_actions (match_id, user_id, action_type, token_number, from_position, to_position, created_at) VALUES (:mid, :uid, 'token_move', :tn, :fp, :tp, CURRENT_TIMESTAMP)");
+        $stmt->execute([':mid' => $matchId, ':uid' => $userId, ':tn' => $tokenNumber, ':fp' => -1, ':tp' => $targetPosition]);
 
         $db->commit();
-
-        jsonResponse(true, 'Token moved successfully', [
-            'match_id' => $matchId,
-            'board_state' => $boardState,
-            'player_number' => $playerNumber,
-            'token_number' => $tokenNumber,
-            'new_position' => $targetPosition,
-        ]);
+        jsonResponse(true, 'Token moved', ['match_id' => $matchId, 'board_state' => $boardState]);
 
     } catch (PDOException $e) {
-        if ($db->inTransaction()) {
-            $db->rollback();
-        }
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        if ($db->inTransaction()) $db->rollback();
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
-// ==============================================
-// VALIDATION FUNCTIONS
-// ==============================================
+// Helper functions
 function validateTokenMove(array $boardState, int $playerNumber, int $tokenNumber, int $diceValue, int $targetPosition): bool
 {
     $playerKey = 'player' . $playerNumber;
     $tokenKey = 'token' . $tokenNumber;
-
     $currentPosition = $boardState[$playerKey][$tokenKey] ?? -1;
-
-    if ($currentPosition === -1 && $diceValue !== 6) {
-        return false;
-    }
-
-    if ($currentPosition === -1 && $diceValue === 6) {
-        return $targetPosition === 0;
-    }
-
-    $expectedPosition = $currentPosition + $diceValue;
-
-    if ($targetPosition !== $expectedPosition) {
-        return false;
-    }
-
-    if ($targetPosition < 0 || $targetPosition > 56) {
-        return false;
-    }
-
-    $ownTokens = $boardState[$playerKey] ?? [];
-    foreach ($ownTokens as $otherToken => $position) {
-        if ($otherToken !== $tokenKey && $position === $targetPosition && $position !== -1) {
-            return false;
-        }
-    }
-
-    return true;
+    if ($currentPosition === -1 && $diceValue !== 6) return false;
+    if ($currentPosition === -1 && $diceValue === 6) return $targetPosition === 0;
+    return ($currentPosition + $diceValue === $targetPosition) && $targetPosition >= 0 && $targetPosition <= 56;
 }
 
 function checkWinner(array $boardState, int $matchId): ?int
 {
-    $player1Tokens = $boardState['player1'] ?? [];
-    $player2Tokens = $boardState['player2'] ?? [];
-
-    $player1Home = 0;
-    $player2Home = 0;
-
-    foreach ($player1Tokens as $position) {
-        if ($position >= 56 || $position === -2) {
-            $player1Home++;
-        }
+    for ($p = 1; $p <= 4; $p++) {
+        $tokens = $boardState["player{$p}"] ?? [];
+        $homeCount = 0;
+        foreach ($tokens as $pos) { if ($pos >= 56 || $pos === -2) $homeCount++; }
+        if ($homeCount >= 4) return getMatchPlayerId($matchId, $p);
     }
-
-    foreach ($player2Tokens as $position) {
-        if ($position >= 56 || $position === -2) {
-            $player2Home++;
-        }
-    }
-
-    if ($player1Home >= 4) {
-        return getMatchPlayerId($matchId, 1);
-    }
-
-    if ($player2Home >= 4) {
-        return getMatchPlayerId($matchId, 2);
-    }
-
     return null;
 }
 
@@ -532,19 +418,11 @@ function getMatchPlayerId(int $matchId, int $playerNumber): ?int
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
-
-        $stmt = $conn->prepare("SELECT player1_id, player2_id FROM matches WHERE id = :match_id");
-        $stmt->execute([':match_id' => $matchId]);
-        $match = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$match) {
-            return null;
-        }
-
-        return $playerNumber === 1 ? intval($match['player1_id']) : intval($match['player2_id']);
-    } catch (Exception $e) {
-        return null;
-    }
+        $stmt = $conn->prepare("SELECT player{$playerNumber}_id FROM matches WHERE id = :mid");
+        $stmt->execute([':mid' => $matchId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ? intval($row["player{$playerNumber}_id"]) : null;
+    } catch (Exception $e) { return null; }
 }
 
 function processSettlement(int $winnerId, int $matchId, float $amount): void
@@ -552,105 +430,40 @@ function processSettlement(int $winnerId, int $matchId, float $amount): void
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
-
         $db->beginTransaction();
 
-        $stmt = $conn->prepare("
-            SELECT wallet_balance, total_earnings, total_matches_played
-            FROM users WHERE id = :user_id FOR UPDATE
-        ");
-        $stmt->execute([':user_id' => $winnerId]);
+        $stmt = $conn->prepare("SELECT wallet_balance FROM users WHERE id = :uid FOR UPDATE");
+        $stmt->execute([':uid' => $winnerId]);
         $winner = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$winner) { $db->rollback(); return; }
 
-        if (!$winner) {
-            $db->rollback();
-            return;
-        }
+        $tdsAmount = ($amount > TDS_THRESHOLD) ? round($amount * (TDS_RATE / 100), 2) : 0;
+        $netAmount = $amount - $tdsAmount;
 
-        $tdsAmount = 0;
-        if ($amount > TDS_THRESHOLD) {
-            $tdsAmount = round($amount * (TDS_RATE / 100), 2);
-            $netAmount = $amount - $tdsAmount;
-        } else {
-            $netAmount = $amount;
-        }
+        $stmt = $conn->prepare("UPDATE users SET wallet_balance = wallet_balance + :net, total_earnings = total_earnings + :amt, total_matches_won = total_matches_won + 1 WHERE id = :uid");
+        $stmt->execute([':net' => $netAmount, ':amt' => $amount, ':uid' => $winnerId]);
 
-        $stmt = $conn->prepare("
-            UPDATE users SET
-                wallet_balance = wallet_balance + :net_amount,
-                total_earnings = total_earnings + :amount,
-                total_matches_played = total_matches_played + 1,
-                total_matches_won = total_matches_won + 1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :winner_id
-        ");
-        $stmt->execute([
-            ':net_amount' => $netAmount,
-            ':amount' => $amount,
-            ':winner_id' => $winnerId
-        ]);
-
-        $orderId = 'WIN-' . strtoupper(uniqid());
-        $stmt = $conn->prepare("
-            INSERT INTO transactions (user_id, match_id, amount, type, source, description, order_id, status, balance_before, balance_after, tds_deducted, metadata, created_at)
-            VALUES (:user_id, :match_id, :amount, 'credit', 'match_win', :description, :order_id, 'success', :balance_before, :balance_after, :tds, :metadata, CURRENT_TIMESTAMP)
-        ");
-        $stmt->execute([
-            ':user_id' => $winnerId, ':match_id' => $matchId, ':amount' => $amount,
-            ':description' => "Match win settlement - Match #{$matchId}",
-            ':order_id' => $orderId,
-            ':balance_before' => floatval($winner['wallet_balance'] ?? 0),
-            ':balance_after' => floatval($winner['wallet_balance'] ?? 0) + $netAmount,
-            ':tds' => $tdsAmount,
-            ':metadata' => json_encode(['winner_id' => $winnerId, 'match_id' => $matchId, 'tds_deducted' => $tdsAmount, 'gross_amount' => $amount, 'net_amount' => $netAmount])
-        ]);
+        $orderId = 'WIN-' . strtoupper(bin2hex(random_bytes(6)));
+        $stmt = $conn->prepare("INSERT INTO transactions (user_id, match_id, amount, type, source, description, order_id, status, balance_before, balance_after, tds_deducted, created_at) VALUES (:uid, :mid, :amt, 'credit', 'match_win', :desc, :oid, 'success', :bb, :ba, :tds, CURRENT_TIMESTAMP)");
+        $stmt->execute([':uid' => $winnerId, ':mid' => $matchId, ':amt' => $amount, ':desc' => "Match win #{$matchId}", ':oid' => $orderId, ':bb' => floatval($winner['wallet_balance']), ':ba' => floatval($winner['wallet_balance']) + $netAmount, ':tds' => $tdsAmount]);
 
         $db->commit();
     } catch (Exception $e) {
-        if ($db->inTransaction()) {
-            $db->rollback();
-        }
+        if ($db->inTransaction()) $db->rollback();
         error_log('Settlement failed: ' . $e->getMessage());
     }
 }
 
-// ==============================================
-// GET MATCH HISTORY
-// ==============================================
 function handleGetMatchHistory(int $userId): void
 {
-    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 20;
-    $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
-
     try {
         $db = Database::getInstance();
         $conn = $db->getConnection();
-
-        $stmt = $conn->prepare("
-            SELECT COUNT(*) FROM matches
-            WHERE (player1_id = :user_id OR player2_id = :user_id)
-            AND status IN ('completed', 'cancelled')
-        ");
-        $stmt->execute([':user_id' => $userId]);
-        $total = intval($stmt->fetchColumn());
-
-        $stmt = $conn->prepare("
-            SELECT id, room_code, entry_fee, prize_pool, status,
-                   player1_name, player2_name, winner_id, winning_amount,
-                   turn_number, created_at, completed_at
-            FROM matches
-            WHERE (player1_id = :user_id OR player2_id = :user_id)
-            AND status IN ('completed', 'cancelled')
-            ORDER BY created_at DESC LIMIT :limit OFFSET :offset
-        ");
-        $stmt->execute([':user_id' => $userId, ':limit' => $limit, ':offset' => $offset]);
-        $matches = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        jsonResponse(true, 'Match history retrieved', [
-            'matches' => $matches, 'total' => $total, 'limit' => $limit, 'offset' => $offset
-        ]);
+        $stmt = $conn->prepare("SELECT * FROM matches WHERE (player1_id = :uid OR player2_id = :uid OR player3_id = :uid OR player4_id = :uid) AND status IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 20");
+        $stmt->execute([':uid' => $userId]);
+        jsonResponse(true, 'History', ['matches' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []]);
     } catch (PDOException $e) {
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 ?>
