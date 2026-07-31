@@ -3,7 +3,7 @@
  * ======================================================
  * INDEX.PHP - MAIN ENTRY POINT (ZUPPEE LUDO UI CLONE)
  * Ludo Tournament Platform - Complete SPA
- * Version: 10.0.3 - CLEAN DASHBOARD
+ * Version: 10.0.4 - TOURNAMENT SYSTEM + ALL FIXES
  * ======================================================
  */
 
@@ -131,119 +131,43 @@ if ($basePath === '') {
                         <h3 class="section-title">🎟️ Tournament Tickets</h3>
                     </div>
                     <div class="tournament-grid-zupee">
-                        <!-- Card 1 -->
                         <div class="tournament-card-zupee" onclick="window.app.handleJoinTournament(10, 1)">
-                            <div class="tcz-header">
-                                <span class="tcz-badge badge-green">Entry ₹10</span>
-                                <span class="tcz-players">2/4 Players</span>
-                            </div>
-                            <div class="tcz-body">
-                                <div class="tcz-prize-row">
-                                    <span class="tcz-prize-label">Prize Pool</span>
-                                    <span class="tcz-prize-amount">₹17</span>
-                                </div>
-                                <div class="tcz-progress">
-                                    <div class="tcz-progress-bar" style="width:50%"></div>
-                                </div>
-                                <div class="tcz-info-row">
-                                    <span>🎯 4 Players</span>
-                                    <span>⏱️ 15 min</span>
-                                </div>
-                            </div>
+                            <div class="tcz-header"><span class="tcz-badge badge-green">Entry ₹10</span><span class="tcz-players">2/4 Players</span></div>
+                            <div class="tcz-body"><div class="tcz-prize-row"><span class="tcz-prize-label">Prize Pool</span><span class="tcz-prize-amount">₹17</span></div><div class="tcz-progress"><div class="tcz-progress-bar" style="width:50%"></div></div><div class="tcz-info-row"><span>🎯 4 Players</span><span>⏱️ 15 min</span></div></div>
                         </div>
-
-                        <!-- Card 2 -->
                         <div class="tournament-card-zupee featured-card" onclick="window.app.handleJoinTournament(20, 2)">
-                            <div class="tcz-header">
-                                <span class="tcz-badge badge-orange">Entry ₹20</span>
-                                <span class="tcz-players">3/4 Players</span>
-                            </div>
-                            <div class="tcz-body">
-                                <div class="tcz-prize-row">
-                                    <span class="tcz-prize-label">Prize Pool</span>
-                                    <span class="tcz-prize-amount">₹34</span>
-                                </div>
-                                <div class="tcz-progress">
-                                    <div class="tcz-progress-bar" style="width:75%"></div>
-                                </div>
-                                <div class="tcz-info-row">
-                                    <span>🎯 4 Players</span>
-                                    <span>⏱️ 15 min</span>
-                                </div>
-                            </div>
+                            <div class="tcz-header"><span class="tcz-badge badge-orange">Entry ₹20</span><span class="tcz-players">3/4 Players</span></div>
+                            <div class="tcz-body"><div class="tcz-prize-row"><span class="tcz-prize-label">Prize Pool</span><span class="tcz-prize-amount">₹34</span></div><div class="tcz-progress"><div class="tcz-progress-bar" style="width:75%"></div></div><div class="tcz-info-row"><span>🎯 4 Players</span><span>⏱️ 15 min</span></div></div>
                         </div>
-
-                        <!-- Card 3 -->
                         <div class="tournament-card-zupee" onclick="window.app.handleJoinTournament(50, 3)">
-                            <div class="tcz-header">
-                                <span class="tcz-badge badge-purple">Entry ₹50</span>
-                                <span class="tcz-players">1/4 Players</span>
-                            </div>
-                            <div class="tcz-body">
-                                <div class="tcz-prize-row">
-                                    <span class="tcz-prize-label">Prize Pool</span>
-                                    <span class="tcz-prize-amount">₹85</span>
-                                </div>
-                                <div class="tcz-progress">
-                                    <div class="tcz-progress-bar" style="width:25%"></div>
-                                </div>
-                                <div class="tcz-info-row">
-                                    <span>🎯 4 Players</span>
-                                    <span>⏱️ 15 min</span>
-                                </div>
-                            </div>
+                            <div class="tcz-header"><span class="tcz-badge badge-purple">Entry ₹50</span><span class="tcz-players">1/4 Players</span></div>
+                            <div class="tcz-body"><div class="tcz-prize-row"><span class="tcz-prize-label">Prize Pool</span><span class="tcz-prize-amount">₹85</span></div><div class="tcz-progress"><div class="tcz-progress-bar" style="width:25%"></div></div><div class="tcz-info-row"><span>🎯 4 Players</span><span>⏱️ 15 min</span></div></div>
                         </div>
-
-                        <!-- Card 4 -->
                         <div class="tournament-card-zupee premium-card" onclick="window.app.handleJoinTournament(100, 4)">
-                            <div class="tcz-header">
-                                <span class="tcz-badge badge-gold">Entry ₹100</span>
-                                <span class="tcz-players">1/4 Players</span>
-                            </div>
-                            <div class="tcz-body">
-                                <div class="tcz-prize-row">
-                                    <span class="tcz-prize-label">Prize Pool</span>
-                                    <span class="tcz-prize-amount">₹170</span>
-                                </div>
-                                <div class="tcz-progress">
-                                    <div class="tcz-progress-bar" style="width:25%"></div>
-                                </div>
-                                <div class="tcz-info-row">
-                                    <span>🎯 4 Players</span>
-                                    <span>⏱️ 15 min</span>
-                                </div>
-                            </div>
+                            <div class="tcz-header"><span class="tcz-badge badge-gold">Entry ₹100</span><span class="tcz-players">1/4 Players</span></div>
+                            <div class="tcz-body"><div class="tcz-prize-row"><span class="tcz-prize-label">Prize Pool</span><span class="tcz-prize-amount">₹170</span></div><div class="tcz-progress"><div class="tcz-progress-bar" style="width:25%"></div></div><div class="tcz-info-row"><span>🎯 4 Players</span><span>⏱️ 15 min</span></div></div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ACTIVE TOURNAMENTS SECTION (NEW) -->
+                <div class="section-container">
+                    <div class="section-header">
+                        <h3 class="section-title">🏆 Active Tournaments</h3>
+                        <button class="section-view-all" onclick="window.app.loadTournaments()" style="background:none;border:none;color:#FFD700;font-weight:600;cursor:pointer;font-family:inherit;font-size:12px">🔄 Refresh</button>
+                    </div>
+                    <div class="tournament-grid-zupee" id="activeTournamentsList">
+                        <div style="text-align:center;padding:20px;color:var(--zupee-text-secondary)">Loading tournaments...</div>
                     </div>
                 </div>
 
                 <!-- HOW TO PLAY SECTION -->
                 <div class="section-container">
-                    <div class="section-header">
-                        <h3 class="section-title">📖 How to Play</h3>
-                    </div>
+                    <div class="section-header"><h3 class="section-title">📖 How to Play</h3></div>
                     <div class="how-to-play">
-                        <div class="htp-step">
-                            <div class="htp-number">1</div>
-                            <div class="htp-text">
-                                <strong>Sign Up</strong>
-                                <p>Create account in seconds</p>
-                            </div>
-                        </div>
-                        <div class="htp-step">
-                            <div class="htp-number">2</div>
-                            <div class="htp-text">
-                                <strong>Add Cash</strong>
-                                <p>Deposit via UPI or cards</p>
-                            </div>
-                        </div>
-                        <div class="htp-step">
-                            <div class="htp-number">3</div>
-                            <div class="htp-text">
-                                <strong>Play & Win</strong>
-                                <p>Beat opponents & withdraw</p>
-                            </div>
-                        </div>
+                        <div class="htp-step"><div class="htp-number">1</div><div class="htp-text"><strong>Sign Up</strong><p>Create account in seconds</p></div></div>
+                        <div class="htp-step"><div class="htp-number">2</div><div class="htp-text"><strong>Add Cash</strong><p>Deposit via UPI or cards</p></div></div>
+                        <div class="htp-step"><div class="htp-number">3</div><div class="htp-text"><strong>Play & Win</strong><p>Beat opponents & withdraw</p></div></div>
                     </div>
                 </div>
 
@@ -270,10 +194,7 @@ if ($basePath === '') {
                         <span class="refer-icon">🎁</span>
                         <h2>Refer & Earn ₹50</h2>
                         <p>Share your code with friends</p>
-                        <div class="refer-code-box">
-                            <span id="referCodeText">REF123456</span>
-                            <button class="btn-copy" id="copyCodeBtn">Copy</button>
-                        </div>
+                        <div class="refer-code-box"><span id="referCodeText">REF123456</span><button class="btn-copy" id="copyCodeBtn">Copy</button></div>
                     </div>
                 </div>
             </section>
@@ -281,25 +202,15 @@ if ($basePath === '') {
             <!-- HISTORY PAGE -->
             <section id="page-history" class="page">
                 <div class="history-container">
-                    <div class="history-filters-zupee">
-                        <button class="filter-btn-zupee active" data-filter="all">All</button>
-                        <button class="filter-btn-zupee" data-filter="won">Won</button>
-                        <button class="filter-btn-zupee" data-filter="lost">Lost</button>
-                    </div>
-                    <div class="history-list-zupee" id="historyList">
-                        <div class="history-empty">No matches played yet</div>
-                    </div>
+                    <div class="history-filters-zupee"><button class="filter-btn-zupee active" data-filter="all">All</button><button class="filter-btn-zupee" data-filter="won">Won</button><button class="filter-btn-zupee" data-filter="lost">Lost</button></div>
+                    <div class="history-list-zupee" id="historyList"><div class="history-empty">No matches played yet</div></div>
                 </div>
             </section>
 
             <!-- PROFILE PAGE -->
             <section id="page-profile" class="page">
                 <div class="profile-container">
-                    <div class="profile-header-card">
-                        <div class="profile-avatar-zupee">G</div>
-                        <h3 id="profileName">Guest User</h3>
-                        <span id="profileId">ID: #GUEST001</span>
-                    </div>
+                    <div class="profile-header-card"><div class="profile-avatar-zupee">G</div><h3 id="profileName">Guest User</h3><span id="profileId">ID: #GUEST001</span></div>
                     <div class="profile-menu-zupee">
                         <button class="pm-item" id="loginBtnProfile">🔑 Login</button>
                         <button class="pm-item" id="registerBtnProfile">📝 Register</button>
@@ -322,10 +233,7 @@ if ($basePath === '') {
         <!-- AUTH MODAL -->
         <div class="modal-overlay-zupee" id="authModal">
             <div class="modal-card-zupee">
-                <div class="modal-header-zupee">
-                    <h2 id="authModalTitle">Welcome Back!</h2>
-                    <button class="modal-close-zupee" id="authModalClose">✕</button>
-                </div>
+                <div class="modal-header-zupee"><h2 id="authModalTitle">Welcome Back!</h2><button class="modal-close-zupee" id="authModalClose">✕</button></div>
                 <div class="modal-body-zupee">
                     <form id="loginForm" class="auth-form-zupee active">
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -374,6 +282,10 @@ if ($basePath === '') {
                 this.bindWalletEvents();
                 this.startBannerCarousel();
                 this.checkAuthStatus();
+                // Load active tournaments on dashboard
+                if (this.currentPage === 'dashboard') {
+                    setTimeout(() => this.loadTournaments(), 1000);
+                }
             }
 
             startBannerCarousel() {
@@ -426,6 +338,8 @@ if ($basePath === '') {
                 const navItem = document.querySelector(`.bn-item[data-page="${page}"]`);
                 if (navItem) navItem.classList.add('active');
                 document.getElementById('appMain').scrollTop = 0;
+                // Load tournaments when navigating to dashboard
+                if (page === 'dashboard') this.loadTournaments();
             }
 
             bindAuthEvents() {
@@ -467,7 +381,7 @@ if ($basePath === '') {
                 const result = await AuthHelper.login({ username, password });
                 if (result.success) {
                     this.isLoggedIn = true; this.userData = result.data.user;
-                    this.updateUI(); this.closeAuthModal();
+                    this.updateUI(); this.closeAuthModal(); this.loadTournaments();
                     this.showToast('✅ Login successful!', 'success');
                 } else {
                     this.showToast('❌ ' + (result.message || 'Login failed'), 'error');
@@ -487,7 +401,7 @@ if ($basePath === '') {
                 const result = await AuthHelper.register(data);
                 if (result.success) {
                     this.isLoggedIn = true; this.userData = result.data.user;
-                    this.updateUI(); this.closeAuthModal();
+                    this.updateUI(); this.closeAuthModal(); this.loadTournaments();
                     this.showToast('✅ Registered!', 'success');
                 } else {
                     this.showToast('❌ ' + (result.message || 'Failed'), 'error');
@@ -521,10 +435,83 @@ if ($basePath === '') {
                 }
             }
 
+            // ==========================================
+            // TOURNAMENT SYSTEM METHODS
+            // ==========================================
+            
+            async loadTournaments() {
+                try {
+                    const res = await fetch(`${this.basePath}/api/tournament_system.php?action=list_active`);
+                    const data = await res.json();
+                    const container = document.getElementById('activeTournamentsList');
+                    if (!container) return;
+                    
+                    if (data.success && data.data.tournaments && data.data.tournaments.length > 0) {
+                        container.innerHTML = data.data.tournaments.map(t => {
+                            const progressPercent = t.total_players > 0 ? (t.registered_count / t.total_players) * 100 : 0;
+                            const modeBadge = t.game_mode === '1vs1' ? 'badge-green' : 'badge-purple';
+                            return `
+                            <div class="tournament-card-zupee" onclick="window.app.registerForTournament(${t.id})">
+                                <div class="tcz-header">
+                                    <span class="tcz-badge ${modeBadge}">${t.game_mode}</span>
+                                    <span class="tcz-players">${t.registered_count}/${t.total_players} Players</span>
+                                </div>
+                                <div class="tcz-body">
+                                    <div class="tcz-prize-row">
+                                        <span class="tcz-prize-label">${escapeHtml(t.name)}</span>
+                                        <span class="tcz-prize-amount">₹${parseFloat(t.entry_fee).toFixed(0)}</span>
+                                    </div>
+                                    <div class="tcz-progress">
+                                        <div class="tcz-progress-bar" style="width:${progressPercent}%"></div>
+                                    </div>
+                                    <div class="tcz-info-row">
+                                        <span>🥇 ₹${parseFloat(t.first_prize_amount || 0).toFixed(0)}</span>
+                                        <span>🥈 ₹${parseFloat(t.second_prize_amount || 0).toFixed(0)}</span>
+                                        <span>🥉 ₹${parseFloat(t.third_prize_amount || 0).toFixed(0)}</span>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    } else {
+                        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--zupee-text-secondary)">No active tournaments. Check back later!</div>';
+                    }
+                } catch (e) {
+                    const container = document.getElementById('activeTournamentsList');
+                    if (container) container.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444">Error loading tournaments</div>';
+                }
+            }
+
+            async registerForTournament(tournamentId) {
+                if (!this.isLoggedIn) { this.showToast('Please login first', 'error'); this.openAuthModal('login'); return; }
+                if (!confirm('Register for this tournament? Entry fee will be deducted from your wallet.')) return;
+                try {
+                    const res = await fetch(`${this.basePath}/api/tournament_system.php?action=register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrfToken },
+                        credentials: 'include',
+                        body: JSON.stringify({ tournament_id: tournamentId, csrf_token: this.csrfToken })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        this.walletBalance = parseFloat(data.data.entry_fee) ? (this.walletBalance - parseFloat(data.data.entry_fee)) : this.walletBalance;
+                        document.getElementById('headerBalance').textContent = '₹' + this.walletBalance.toFixed(0);
+                        document.getElementById('walletLarge').textContent = '₹' + this.walletBalance.toFixed(2);
+                        this.showToast('✅ Registered! ' + data.data.registered_count + '/' + data.data.total_players, 'success');
+                        this.loadTournaments();
+                    } else {
+                        this.showToast('❌ ' + (data.message || 'Registration failed'), 'error');
+                    }
+                } catch (e) { this.showToast('Network error', 'error'); }
+            }
+
+            // ==========================================
+            // QUICK MATCH JOIN
+            // ==========================================
+            
             async handleJoinTournament(entryFee, tournamentId) {
                 if (!this.isLoggedIn) { this.showToast('Please login to play', 'error'); this.openAuthModal('login'); return; }
                 if (this.walletBalance < entryFee) { this.showToast(`Need ₹${entryFee} to join`, 'error'); this.navigateTo('wallet'); return; }
-                this.showToast('Joining tournament...', 'info');
+                this.showToast('Joining match...', 'info');
                 try {
                     const res = await fetch(`${this.basePath}/api/match.php?action=join`, {
                         method: 'POST',
@@ -553,6 +540,14 @@ if ($basePath === '') {
                 if (this.toastTimer) clearTimeout(this.toastTimer);
                 this.toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3000);
             }
+        }
+
+        // Helper function for HTML escaping in template literals
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
         }
 
         document.addEventListener('DOMContentLoaded', () => { window.app = new ZupeeApp(); });
