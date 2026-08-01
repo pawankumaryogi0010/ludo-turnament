@@ -1,12 +1,13 @@
 /**
  * INVITE-SYSTEM.JS - Complete Invite System (FIXED)
- * Version: 2.0.0 - API PATHS FIXED
+ * Version: 2.1.0 - DYNAMIC API PATH FIXED
  */
 
 class InviteSystem {
     constructor() {
         this.inviteCode = null; this.roomCode = null; this.matchId = null; this.userId = null;
-        this.apiBase = window.location.origin + '/ludo/api/invite.php';
+        // FIXED: Dynamic API base path - works in any folder
+        this.apiBase = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '') + '/api/invite.php';
         this.init();
     }
 
@@ -88,4 +89,4 @@ class InviteSystem {
 }
 
 document.addEventListener('DOMContentLoaded', () => { window.inviteSystem = new InviteSystem(); });
-console.log('📨 Invite System v2.0 loaded');
+console.log('📨 Invite System v2.1 loaded');
