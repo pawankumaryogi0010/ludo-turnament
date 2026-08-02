@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * TOURNAMENT_SYSTEM.PHP - Complete Tournament API
+ * TOURNAMENT_SYSTEM.PHP - Complete Tournament API (FIXED)
  * Ludo Tournament Platform - Multiplayer Tournament System
- * Version: 1.0.0 - 1vs1 + 1vs4 + Bracket System
+ * Version: 1.0.1 - ALLOW LISTING WITHOUT LOGIN
  * ======================================================
  */
 
@@ -26,51 +26,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// AUTHENTICATION
-if (!isLoggedIn()) {
-    jsonResponse(false, 'Please login first', [], 401);
-}
-
-$userId = getCurrentUserId();
-if (!$userId) {
-    jsonResponse(false, 'Invalid session', [], 401);
+// FIXED: Don't force login for listing - only for actions that need it
+$userId = null;
+if (isLoggedIn()) {
+    $userId = getCurrentUserId();
 }
 
 // ROUTING
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
-    // User actions
+    // PUBLIC: Anyone can view
     case 'list_active':
         handleListActiveTournaments();
         break;
     case 'get_tournament':
         handleGetTournament();
         break;
+    
+    // REQUIRE LOGIN
     case 'register':
+        requireLogin();
         handleRegisterForTournament();
         break;
     case 'my_registrations':
+        requireLogin();
         handleMyRegistrations();
         break;
     
-    // Admin actions
+    // ADMIN ONLY
     case 'admin_create':
+        requireLogin();
         handleAdminCreateTournament();
         break;
     case 'admin_update':
+        requireLogin();
         handleAdminUpdateTournament();
         break;
     case 'admin_delete':
+        requireLogin();
         handleAdminDeleteTournament();
         break;
     case 'admin_start':
+        requireLogin();
         handleAdminStartTournament();
         break;
     case 'admin_end':
+        requireLogin();
         handleAdminEndTournament();
         break;
     case 'admin_distribute_prizes':
+        requireLogin();
         handleAdminDistributePrizes();
         break;
     
@@ -78,8 +84,16 @@ switch ($action) {
         jsonResponse(false, 'Invalid action', [], 400);
 }
 
+// FIXED: Helper function for login check
+function requireLogin() {
+    global $userId;
+    if (!$userId) {
+        jsonResponse(false, 'Please login first', [], 401);
+    }
+}
+
 // ==============================================
-// LIST ACTIVE TOURNAMENTS
+// LIST ACTIVE TOURNAMENTS (PUBLIC)
 // ==============================================
 function handleListActiveTournaments() {
     global $conn;
@@ -105,7 +119,7 @@ function handleListActiveTournaments() {
 }
 
 // ==============================================
-// GET SINGLE TOURNAMENT DETAILS
+// GET SINGLE TOURNAMENT DETAILS (PUBLIC)
 // ==============================================
 function handleGetTournament() {
     global $conn;
@@ -148,7 +162,7 @@ function handleGetTournament() {
 }
 
 // ==============================================
-// REGISTER FOR TOURNAMENT
+// REGISTER FOR TOURNAMENT (LOGIN REQUIRED)
 // ==============================================
 function handleRegisterForTournament() {
     global $db, $conn, $userId;
@@ -169,9 +183,7 @@ function handleRegisterForTournament() {
         $db->beginTransaction();
         
         // Get tournament with lock
-        $stmt = $conn->prepare("
-            SELECT * FROM tournaments WHERE id = :tid FOR UPDATE
-        ");
+        $stmt = $conn->prepare("SELECT * FROM tournaments WHERE id = :tid FOR UPDATE");
         $stmt->execute([':tid' => $tournamentId]);
         $tournament = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -218,10 +230,7 @@ function handleRegisterForTournament() {
         $stmt->execute([':fee' => $tournament['entry_fee'], ':uid' => $userId]);
         
         // Register user
-        $stmt = $conn->prepare("
-            INSERT INTO tournament_registrations (tournament_id, user_id, entry_fee_paid, status)
-            VALUES (:tid, :uid, :fee, 'registered')
-        ");
+        $stmt = $conn->prepare("INSERT INTO tournament_registrations (tournament_id, user_id, entry_fee_paid, status) VALUES (:tid, :uid, :fee, 'registered')");
         $stmt->execute([':tid' => $tournamentId, ':uid' => $userId, ':fee' => $tournament['entry_fee']]);
         
         // Update registered count
@@ -230,10 +239,7 @@ function handleRegisterForTournament() {
         
         // Record transaction
         $orderId = 'TREG-' . strtoupper(bin2hex(random_bytes(6)));
-        $stmt = $conn->prepare("
-            INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at)
-            VALUES (:uid, :tid, :amt, 'debit', 'match_fee', :desc, :oid, 'success', :bb, :ba, CURRENT_TIMESTAMP)
-        ");
+        $stmt = $conn->prepare("INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at) VALUES (:uid, :tid, :amt, 'debit', 'match_fee', :desc, :oid, 'success', :bb, :ba, CURRENT_TIMESTAMP)");
         $stmt->execute([
             ':uid' => $userId, ':tid' => $tournamentId, ':amt' => $tournament['entry_fee'],
             ':desc' => "Tournament registration: {$tournament['name']}",
@@ -259,7 +265,7 @@ function handleRegisterForTournament() {
 }
 
 // ==============================================
-// MY REGISTRATIONS
+// MY REGISTRATIONS (LOGIN REQUIRED)
 // ==============================================
 function handleMyRegistrations() {
     global $conn, $userId;
@@ -288,7 +294,6 @@ function handleMyRegistrations() {
 function handleAdminCreateTournament() {
     global $db, $conn;
     
-    // Verify admin
     if (!isAdminLoggedIn()) {
         jsonResponse(false, 'Admin access required', [], 403);
     }
@@ -313,7 +318,6 @@ function handleAdminCreateTournament() {
     $secondPrizePercent = floatval($input['second_prize_percent'] ?? 30);
     $thirdPrizePercent = floatval($input['third_prize_percent'] ?? 10);
     
-    // Validate percentages
     if (($firstPrizePercent + $secondPrizePercent + $thirdPrizePercent) > 100) {
         jsonResponse(false, 'Prize percentages exceed 100%', [], 400);
     }
@@ -322,24 +326,12 @@ function handleAdminCreateTournament() {
     $totalPool = $entryFee * $totalPlayers;
     $platformFee = $totalPool * (PLATFORM_FEE / 100);
     $prizePool = $totalPool - $platformFee;
-    
     $tournamentCode = 'T' . strtoupper(bin2hex(random_bytes(4)));
     
     try {
         $stmt = $conn->prepare("
-            INSERT INTO tournaments (
-                tournament_code, name, game_mode, entry_fee, prize_pool, platform_fee,
-                max_players, total_players, min_players,
-                first_prize_percent, second_prize_percent, third_prize_percent,
-                first_prize_amount, second_prize_amount, third_prize_amount,
-                status, created_by, created_at, updated_at
-            ) VALUES (
-                :code, :name, :mode, :fee, :prize, :pf,
-                :max, :total, 2,
-                :fp, :sp, :tp,
-                :fa, :sa, :ta,
-                'scheduled', :admin, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
+            INSERT INTO tournaments (tournament_code, name, game_mode, entry_fee, prize_pool, platform_fee, max_players, total_players, min_players, first_prize_percent, second_prize_percent, third_prize_percent, first_prize_amount, second_prize_amount, third_prize_amount, status, created_by, created_at, updated_at)
+            VALUES (:code, :name, :mode, :fee, :prize, :pf, :max, :total, 2, :fp, :sp, :tp, :fa, :sa, :ta, 'scheduled', :admin, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':code' => $tournamentCode, ':name' => $name, ':mode' => $gameMode,
@@ -352,23 +344,16 @@ function handleAdminCreateTournament() {
             ':admin' => $_SESSION['admin_id']
         ]);
         
-        $tournamentId = $conn->lastInsertId();
-        
         jsonResponse(true, 'Tournament created successfully!', [
-            'tournament_id' => $tournamentId,
+            'tournament_id' => $conn->lastInsertId(),
             'tournament_code' => $tournamentCode,
             'name' => $name,
             'game_mode' => $gameMode,
             'entry_fee' => $entryFee,
-            'total_players' => $totalPlayers,
-            'prize_pool' => round($prizePool, 2),
-            'first_prize' => round($prizePool * ($firstPrizePercent/100), 2),
-            'second_prize' => round($prizePool * ($secondPrizePercent/100), 2),
-            'third_prize' => round($prizePool * ($thirdPrizePercent/100), 2)
+            'total_players' => $totalPlayers
         ]);
-        
     } catch (PDOException $e) {
-        jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
+        jsonResponse(false, 'Database error', [], 500);
     }
 }
 
@@ -376,7 +361,7 @@ function handleAdminCreateTournament() {
 // ADMIN: UPDATE TOURNAMENT
 // ==============================================
 function handleAdminUpdateTournament() {
-    global $db, $conn;
+    global $conn;
     
     if (!isAdminLoggedIn()) {
         jsonResponse(false, 'Admin access required', [], 403);
@@ -393,10 +378,8 @@ function handleAdminUpdateTournament() {
         $fields = [];
         $params = [':id' => $tournamentId];
         
-        if (isset($input['status'])) $fields[] = "status = :status"; $params[':status'] = $input['status'];
-        if (isset($input['name'])) $fields[] = "name = :name"; $params[':name'] = $input['name'];
-        if (isset($input['entry_fee'])) $fields[] = "entry_fee = :fee"; $params[':fee'] = floatval($input['entry_fee']);
-        if (isset($input['total_players'])) $fields[] = "total_players = :tp"; $params[':tp'] = intval($input['total_players']);
+        if (isset($input['status'])) { $fields[] = "status = :status"; $params[':status'] = $input['status']; }
+        if (isset($input['name'])) { $fields[] = "name = :name"; $params[':name'] = $input['name']; }
         
         if (empty($fields)) {
             jsonResponse(false, 'No fields to update', [], 400);
@@ -406,7 +389,7 @@ function handleAdminUpdateTournament() {
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         
-        jsonResponse(true, 'Tournament updated successfully');
+        jsonResponse(true, 'Tournament updated');
     } catch (PDOException $e) {
         jsonResponse(false, 'Database error', [], 500);
     }
@@ -468,7 +451,7 @@ function handleAdminStartTournament() {
 }
 
 // ==============================================
-// ADMIN: END TOURNAMENT & DISTRIBUTE PRIZES
+// ADMIN: END TOURNAMENT
 // ==============================================
 function handleAdminEndTournament() {
     global $conn;
@@ -482,7 +465,6 @@ function handleAdminEndTournament() {
     try {
         $stmt = $conn->prepare("UPDATE tournaments SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE id = :id");
         $stmt->execute([':id' => $tournamentId]);
-        
         jsonResponse(true, 'Tournament ended');
     } catch (PDOException $e) {
         jsonResponse(false, 'Database error', [], 500);
@@ -512,7 +494,6 @@ function handleAdminDistributePrizes() {
     try {
         $db->beginTransaction();
         
-        // Get tournament
         $stmt = $conn->prepare("SELECT * FROM tournaments WHERE id = :id FOR UPDATE");
         $stmt->execute([':id' => $tournamentId]);
         $tournament = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -530,7 +511,6 @@ function handleAdminDistributePrizes() {
         $secondPrize = round($netPool * ($tournament['second_prize_percent'] / 100), 2);
         $thirdPrize = round($netPool * ($tournament['third_prize_percent'] / 100), 2);
         
-        // Credit winners
         $winners = [
             $firstWinnerId => ['prize' => $firstPrize, 'status' => 'winner'],
             $secondWinnerId => ['prize' => $secondPrize, 'status' => 'runner_up'],
@@ -539,52 +519,28 @@ function handleAdminDistributePrizes() {
         
         foreach ($winners as $winnerId => $data) {
             if ($winnerId > 0) {
-                // Credit wallet
                 $stmt = $conn->prepare("UPDATE users SET wallet_balance = wallet_balance + :prize, total_earnings = total_earnings + :prize WHERE id = :uid");
                 $stmt->execute([':prize' => $data['prize'], ':uid' => $winnerId]);
                 
-                // Update registration
                 $stmt = $conn->prepare("UPDATE tournament_registrations SET status = :status, prize_won = :prize WHERE tournament_id = :tid AND user_id = :uid");
                 $stmt->execute([':status' => $data['status'], ':prize' => $data['prize'], ':tid' => $tournamentId, ':uid' => $winnerId]);
                 
-                // Record transaction
                 $orderId = 'PRIZE-' . strtoupper(bin2hex(random_bytes(6)));
-                $stmt = $conn->prepare("
-                    INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at)
-                    VALUES (:uid, :tid, :amt, 'credit', 'match_win', :desc, :oid, 'success', 
-                    (SELECT wallet_balance FROM users WHERE id = :uid) - :amt,
-                    (SELECT wallet_balance FROM users WHERE id = :uid), CURRENT_TIMESTAMP)
-                ");
-                $stmt->execute([
-                    ':uid' => $winnerId, ':tid' => $tournamentId, ':amt' => $data['prize'],
-                    ':desc' => "Tournament prize: {$tournament['name']}",
-                    ':oid' => $orderId
-                ]);
+                $stmt = $conn->prepare("INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at) VALUES (:uid, :tid, :amt, 'credit', 'match_win', :desc, :oid, 'success', (SELECT wallet_balance FROM users WHERE id = :uid) - :amt, (SELECT wallet_balance FROM users WHERE id = :uid), CURRENT_TIMESTAMP)");
+                $stmt->execute([':uid' => $winnerId, ':tid' => $tournamentId, ':amt' => $data['prize'], ':desc' => "Tournament prize: {$tournament['name']}", ':oid' => $orderId]);
             }
         }
         
-        // Update tournament
-        $stmt = $conn->prepare("
-            UPDATE tournaments SET 
-                first_prize_amount = :fp, second_prize_amount = :sp, third_prize_amount = :tp,
-                winner_id = :wid, status = 'completed', end_time = CURRENT_TIMESTAMP
-            WHERE id = :id
-        ");
-        $stmt->execute([
-            ':fp' => $firstPrize, ':sp' => $secondPrize, ':tp' => $thirdPrize,
-            ':wid' => $firstWinnerId, ':id' => $tournamentId
-        ]);
+        $stmt = $conn->prepare("UPDATE tournaments SET first_prize_amount = :fp, second_prize_amount = :sp, third_prize_amount = :tp, winner_id = :wid, status = 'completed', end_time = CURRENT_TIMESTAMP WHERE id = :id");
+        $stmt->execute([':fp' => $firstPrize, ':sp' => $secondPrize, ':tp' => $thirdPrize, ':wid' => $firstWinnerId, ':id' => $tournamentId]);
         
         $db->commit();
         
         jsonResponse(true, 'Prizes distributed successfully!', [
             'first_prize' => $firstPrize,
             'second_prize' => $secondPrize,
-            'third_prize' => $thirdPrize,
-            'platform_fee' => round($platformFee, 2),
-            'total_pool' => round($totalPool, 2)
+            'third_prize' => $thirdPrize
         ]);
-        
     } catch (PDOException $e) {
         if ($db->inTransaction()) $db->rollback();
         jsonResponse(false, 'Database error', [], 500);
