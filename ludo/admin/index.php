@@ -3,7 +3,7 @@
  * ======================================================
  * ADMIN INDEX.PHP - Pro Command Center (FIXED)
  * Ludo Tournament Platform - Admin Dashboard
- * Version: 4.0.0 - API PATH FIXES + ALL BUGS FIXED
+ * Version: 5.0.0 - ADMIN LOGIN FULLY FIXED
  * ======================================================
  */
 
@@ -49,7 +49,7 @@ if (isset($_SESSION['admin_id']) && isset($_SESSION['admin_token'])) {
     }
 }
 
-// Handle login
+// Handle login - FIXED
 if (!$isAdminLoggedIn && isset($_POST['admin_login'])) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -59,13 +59,24 @@ if (!$isAdminLoggedIn && isset($_POST['admin_login'])) {
             $db = Database::getInstance();
             $conn = $db->getConnection();
             
-            $db->beginTransaction();
+            // FIXED: Debug - agar login fail ho raha hai toh comment hatao
+            /*
+            $testStmt = $conn->prepare("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username = :uname");
+            $testStmt->execute([':uname' => $username]);
+            $testUser = $testStmt->fetch(PDO::FETCH_ASSOC);
+            error_log('Login attempt: ' . $username . ' - User found: ' . ($testUser ? 'YES' : 'NO'));
+            if ($testUser) {
+                error_log('Password verify: ' . (password_verify($password, $testUser['password_hash']) ? 'YES' : 'NO'));
+            }
+            */
             
-            $stmt = $conn->prepare("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username = :uname AND is_admin = 1 FOR UPDATE");
+            $stmt = $conn->prepare("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username = :uname AND is_admin = 1");
             $stmt->execute([':uname' => $username]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($user && $user['is_active'] == 1 && password_verify($password, $user['password_hash'])) {
+                $db->beginTransaction();
+                
                 $adminToken = bin2hex(random_bytes(64));
                 $expiresAt = date('Y-m-d H:i:s', strtotime('+8 hours'));
                 
@@ -90,12 +101,11 @@ if (!$isAdminLoggedIn && isset($_POST['admin_login'])) {
                 header('Location: ' . $_SERVER['PHP_SELF']);
                 exit;
             } else {
-                $db->rollback();
                 $loginError = 'Invalid username or password';
             }
         } catch (Exception $e) {
             if (isset($db) && $db->inTransaction()) $db->rollback();
-            $loginError = 'Database error occurred';
+            $loginError = 'Database error occurred: ' . $e->getMessage();
         }
     } else {
         $loginError = 'Please enter username and password';
@@ -141,39 +151,17 @@ function handleAdminAjax() {
         }
         
         switch ($action) {
-            case 'get_stats':
-                $response = getAdminStats($conn);
-                break;
-            case 'get_users':
-                $response = getUsersList($conn);
-                break;
-            case 'update_balance':
-                $response = updateUserBalance($db, $conn);
-                break;
-            case 'get_transactions':
-                $response = getUserTransactions($conn);
-                break;
-            case 'toggle_user':
-                $response = toggleUserStatus($conn);
-                break;
-            case 'get_matches':
-                $response = getMatchesList($conn);
-                break;
-            case 'get_kyc_stats':
-                $response = getKycStats($conn);
-                break;
-            case 'get_withdrawal_stats':
-                $response = getWithdrawalStats($conn);
-                break;
-            case 'get_dispute_stats':
-                $response = getDisputeStats($conn);
-                break;
-            case 'get_financial_metrics':
-                $response = getFinancialMetrics($conn);
-                break;
-            case 'get_tournaments':
-                $response = getTournamentsList($conn);
-                break;
+            case 'get_stats': $response = getAdminStats($conn); break;
+            case 'get_users': $response = getUsersList($conn); break;
+            case 'update_balance': $response = updateUserBalance($db, $conn); break;
+            case 'get_transactions': $response = getUserTransactions($conn); break;
+            case 'toggle_user': $response = toggleUserStatus($conn); break;
+            case 'get_matches': $response = getMatchesList($conn); break;
+            case 'get_kyc_stats': $response = getKycStats($conn); break;
+            case 'get_withdrawal_stats': $response = getWithdrawalStats($conn); break;
+            case 'get_dispute_stats': $response = getDisputeStats($conn); break;
+            case 'get_financial_metrics': $response = getFinancialMetrics($conn); break;
+            case 'get_tournaments': $response = getTournamentsList($conn); break;
         }
     } catch (Exception $e) {
         $response['message'] = 'Error: ' . $e->getMessage();
@@ -193,7 +181,6 @@ function getAdminStats($conn) {
     $stats['active_tournaments'] = intval($conn->query("SELECT COUNT(*) FROM matches WHERE status IN ('playing','ready')")->fetchColumn());
     $stats['matches_today'] = intval($conn->query("SELECT COUNT(*) FROM matches WHERE DATE(completed_at) = CURDATE() AND status = 'completed'")->fetchColumn());
     $stats['total_platform_revenue'] = floatval($conn->query("SELECT SUM(amount) FROM transactions WHERE source = 'deposit' AND description LIKE '%commission%' AND status = 'success'")->fetchColumn());
-    $stats['cashfree_collections'] = floatval($conn->query("SELECT SUM(amount) FROM transactions WHERE payment_gateway = 'cashfree' AND status = 'success'")->fetchColumn());
     $stats['net_platform_profit'] = floatval($conn->query("SELECT SUM(platform_fee) FROM matches WHERE status = 'completed'")->fetchColumn());
     $stats['today_revenue'] = floatval($conn->query("SELECT SUM(amount) FROM transactions WHERE source = 'deposit' AND description LIKE '%commission%' AND status = 'success' AND DATE(created_at) = CURDATE()")->fetchColumn());
     $stats['pending_withdrawals'] = intval($conn->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn());
@@ -233,9 +220,7 @@ function getUsersList($conn) {
 
 function updateUserBalance($db, $conn) {
     $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input || !isset($input['user_id']) || !isset($input['amount'])) {
-        return ['success' => false, 'message' => 'Missing fields'];
-    }
+    if (!$input || !isset($input['user_id']) || !isset($input['amount'])) return ['success' => false, 'message' => 'Missing fields'];
     
     $userId = intval($input['user_id']);
     $amount = floatval($input['amount']);
@@ -244,20 +229,14 @@ function updateUserBalance($db, $conn) {
     
     try {
         $db->beginTransaction();
-        
         $stmt = $conn->prepare("SELECT id, username, wallet_balance FROM users WHERE id = :uid FOR UPDATE");
         $stmt->execute([':uid' => $userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
         if (!$user) { $db->rollback(); return ['success' => false, 'message' => 'User not found']; }
         
         $currentBalance = floatval($user['wallet_balance']);
         $newBalance = $type === 'credit' ? $currentBalance + $amount : $currentBalance - $amount;
-        
-        if ($type === 'debit' && $newBalance < 0) {
-            $db->rollback();
-            return ['success' => false, 'message' => 'Insufficient balance'];
-        }
+        if ($type === 'debit' && $newBalance < 0) { $db->rollback(); return ['success' => false, 'message' => 'Insufficient balance']; }
         
         $stmt = $conn->prepare("UPDATE users SET wallet_balance = :new_bal, updated_at = CURRENT_TIMESTAMP WHERE id = :uid");
         $stmt->execute([':new_bal' => $newBalance, ':uid' => $userId]);
@@ -278,7 +257,6 @@ function getUserTransactions($conn) {
     $userId = intval($_GET['user_id'] ?? 0);
     $limit = intval($_GET['limit'] ?? 50);
     if ($userId <= 0) return ['success' => false, 'message' => 'Invalid user ID'];
-    
     $stmt = $conn->prepare("SELECT id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at, processed_at FROM transactions WHERE user_id = :uid ORDER BY created_at DESC LIMIT :limit");
     $stmt->execute([':uid' => $userId, ':limit' => $limit]);
     return ['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
@@ -287,11 +265,9 @@ function getUserTransactions($conn) {
 function toggleUserStatus($conn) {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input || !isset($input['user_id'])) return ['success' => false, 'message' => 'Missing user ID'];
-    
     $userId = intval($input['user_id']);
     $stmt = $conn->prepare("UPDATE users SET is_active = NOT is_active, updated_at = CURRENT_TIMESTAMP WHERE id = :uid AND is_admin = 0");
     $stmt->execute([':uid' => $userId]);
-    
     if ($stmt->rowCount() === 0) return ['success' => false, 'message' => 'User not found or is admin'];
     return ['success' => true, 'message' => 'User status updated'];
 }
@@ -300,37 +276,29 @@ function getMatchesList($conn) {
     $status = $_GET['status'] ?? '';
     $limit = intval($_GET['limit'] ?? 50);
     $offset = intval($_GET['offset'] ?? 0);
-    
     $where = "1=1";
     $params = [];
     if (!empty($status)) { $where .= " AND m.status = :status"; $params[':status'] = $status; }
-    
     $stmt = $conn->prepare("SELECT COUNT(*) FROM matches m WHERE {$where}");
     $stmt->execute($params);
     $total = intval($stmt->fetchColumn());
-    
     $stmt = $conn->prepare("SELECT m.id, m.room_code, m.entry_fee, m.prize_pool, m.platform_fee, m.status, m.player1_name, m.player2_name, m.winner_name, m.winning_amount, m.tds_deducted, m.turn_number, m.created_at, m.started_at, m.completed_at FROM matches m WHERE {$where} ORDER BY m.id DESC LIMIT :limit OFFSET :offset");
     $params[':limit'] = $limit;
     $params[':offset'] = $offset;
     $stmt->execute($params);
-    
     return ['success' => true, 'data' => ['matches' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [], 'total' => $total, 'limit' => $limit, 'offset' => $offset]];
 }
 
 function getKycStats($conn) {
     $stats = [];
-    foreach (['pending', 'verified', 'rejected'] as $s) {
-        $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM kyc_documents WHERE status = '{$s}'")->fetchColumn());
-    }
+    foreach (['pending', 'verified', 'rejected'] as $s) { $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM kyc_documents WHERE status = '{$s}'")->fetchColumn()); }
     $stats['total'] = array_sum($stats);
     return ['success' => true, 'data' => $stats];
 }
 
 function getWithdrawalStats($conn) {
     $stats = [];
-    foreach (['pending', 'processing', 'approved', 'completed', 'rejected'] as $s) {
-        $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM withdrawals WHERE status = '{$s}'")->fetchColumn());
-    }
+    foreach (['pending', 'processing', 'approved', 'completed', 'rejected'] as $s) { $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM withdrawals WHERE status = '{$s}'")->fetchColumn()); }
     $stats['total_pending_amount'] = floatval($conn->query("SELECT SUM(amount) FROM withdrawals WHERE status = 'pending'")->fetchColumn());
     $stats['total_processed_amount'] = floatval($conn->query("SELECT SUM(amount) FROM withdrawals WHERE status IN ('approved','completed')")->fetchColumn());
     $stats['total_amount'] = floatval($conn->query("SELECT SUM(amount) FROM withdrawals")->fetchColumn());
@@ -340,9 +308,7 @@ function getWithdrawalStats($conn) {
 
 function getDisputeStats($conn) {
     $stats = [];
-    foreach (['open', 'investigating', 'resolved', 'closed'] as $s) {
-        $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM dispute_tickets WHERE status = '{$s}'")->fetchColumn());
-    }
+    foreach (['open', 'investigating', 'resolved', 'closed'] as $s) { $stats[$s] = intval($conn->query("SELECT COUNT(*) FROM dispute_tickets WHERE status = '{$s}'")->fetchColumn()); }
     $stats['total'] = array_sum($stats);
     $stats['high_priority'] = intval($conn->query("SELECT COUNT(*) FROM dispute_tickets WHERE priority IN ('high','urgent') AND status IN ('open','investigating')")->fetchColumn());
     $stats['total_refunds'] = floatval($conn->query("SELECT SUM(refund_amount) FROM dispute_tickets WHERE status = 'resolved' AND resolution_type = 'refund'")->fetchColumn());
@@ -354,20 +320,16 @@ function getFinancialMetrics($conn) {
     $stmt = $conn->prepare("SELECT metric_date, daily_deposits, daily_withdrawals, daily_platform_revenue, daily_matches_played, daily_new_users, total_platform_liability, total_user_balance, total_tds_deducted FROM financial_metrics WHERE metric_date >= DATE_SUB(CURDATE(), INTERVAL :days DAY) ORDER BY metric_date ASC");
     $stmt->execute([':days' => $days]);
     $metrics = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
     $totals = $conn->query("SELECT SUM(wallet_balance) as total_balance, SUM(total_earnings) as total_earnings, SUM(total_withdrawn) as total_withdrawn FROM users WHERE is_admin = 0")->fetch(PDO::FETCH_ASSOC);
-    
     return ['success' => true, 'data' => ['history' => $metrics ?: [], 'totals' => ['total_user_balance' => floatval($totals['total_balance'] ?? 0), 'total_earnings' => floatval($totals['total_earnings'] ?? 0), 'total_withdrawn' => floatval($totals['total_withdrawn'] ?? 0)]]];
 }
 
 function getTournamentsList($conn) {
     $limit = intval($_GET['limit'] ?? 10);
     $status = $_GET['status'] ?? '';
-    
     $where = "1=1";
     $params = [];
     if (!empty($status)) { $where .= " AND status = :status"; $params[':status'] = $status; }
-    
     $stmt = $conn->prepare("SELECT t.*, u.username as created_by_name, (SELECT COUNT(*) FROM matches WHERE tournament_id = t.id) as match_count FROM tournaments t LEFT JOIN users u ON t.created_by = u.id WHERE {$where} ORDER BY CASE t.status WHEN 'active' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, t.created_at DESC LIMIT :limit");
     $stmt->execute([':limit' => $limit]);
     return ['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []];
@@ -537,49 +499,29 @@ function getTournamentsList($conn) {
         function loadUsers(){
             document.getElementById('usersBody').innerHTML='<tr><td colspan="6">Loading...</td></tr>';
             fetch(`?ajax=1&action=get_users&offset=${state.usersPage*state.usersLimit}&limit=${state.usersLimit}`).then(handleApiResponse).then(d=>{
-                if(d.success){
-                    state.usersTotal=d.data.total;
-                    document.getElementById('usersBody').innerHTML=(d.data.users||[]).map(u=>`<tr><td>#${u.id}</td><td>${u.username}</td><td>${u.mobile}</td><td style="color:#fbbf24">₹${parseFloat(u.wallet_balance).toFixed(2)}</td><td><span class="status-badge ${u.is_active?'success':'failed'}">${u.is_active?'Active':'Inactive'}</span></td><td><button class="btn-action primary" onclick="editBalance(${u.id},'${u.username}',${u.wallet_balance})">💰</button><button class="btn-action danger" onclick="toggleUser(${u.id})">🔒</button></td></tr>`).join('');
-                }
+                if(d.success){state.usersTotal=d.data.total;document.getElementById('usersBody').innerHTML=(d.data.users||[]).map(u=>`<tr><td>#${u.id}</td><td>${u.username}</td><td>${u.mobile}</td><td style="color:#fbbf24">₹${parseFloat(u.wallet_balance).toFixed(2)}</td><td><span class="status-badge ${u.is_active?'success':'failed'}">${u.is_active?'Active':'Inactive'}</span></td><td><button class="btn-action primary" onclick="editBalance(${u.id},'${u.username}',${u.wallet_balance})">💰</button><button class="btn-action danger" onclick="toggleUser(${u.id})">🔒</button></td></tr>`).join('');}
             }).catch(()=>{document.getElementById('usersBody').innerHTML='<tr><td colspan="6">Error loading users</td></tr>'});
         }
         
         function loadMatches(){
             document.getElementById('matchesBody').innerHTML='<tr><td colspan="6">Loading...</td></tr>';
-            fetch('?ajax=1&action=get_matches').then(handleApiResponse).then(d=>{
-                if(d.success){
-                    document.getElementById('matchesBody').innerHTML=(d.data.matches||[]).map(m=>`<tr><td>#${m.id}</td><td>${m.room_code}</td><td>₹${parseFloat(m.entry_fee).toFixed(2)}</td><td>₹${parseFloat(m.prize_pool).toFixed(2)}</td><td><span class="status-badge ${m.status}">${m.status}</span></td><td>${m.player1_name} vs ${m.player2_name||'-'}</td></tr>`).join('');
-                }
-            }).catch(()=>{document.getElementById('matchesBody').innerHTML='<tr><td colspan="6">Error</td></tr>'});
+            fetch('?ajax=1&action=get_matches').then(handleApiResponse).then(d=>{if(d.success){document.getElementById('matchesBody').innerHTML=(d.data.matches||[]).map(m=>`<tr><td>#${m.id}</td><td>${m.room_code}</td><td>₹${parseFloat(m.entry_fee).toFixed(2)}</td><td>₹${parseFloat(m.prize_pool).toFixed(2)}</td><td><span class="status-badge ${m.status}">${m.status}</span></td><td>${m.player1_name} vs ${m.player2_name||'-'}</td></tr>`).join('');}}).catch(()=>{document.getElementById('matchesBody').innerHTML='<tr><td colspan="6">Error</td></tr>'});
         }
         
         function loadTransactions(){
             document.getElementById('transactionsBody').innerHTML='<tr><td colspan="6">Loading...</td></tr>';
-            fetch('?ajax=1&action=get_transactions&user_id=0').then(handleApiResponse).then(d=>{
-                if(d.success){
-                    document.getElementById('transactionsBody').innerHTML=(d.data||[]).map(t=>`<tr><td>#${t.id}</td><td>User #${t.user_id}</td><td style="color:${t.type==='credit'?'#10b981':'#ef4444'}">${t.type==='credit'?'+':'-'}₹${parseFloat(t.amount).toFixed(2)}</td><td>${t.type}</td><td>${t.source}</td><td><span class="status-badge ${t.status}">${t.status}</span></td></tr>`).join('');
-                }
-            }).catch(()=>{});
+            fetch('?ajax=1&action=get_transactions&user_id=0').then(handleApiResponse).then(d=>{if(d.success){document.getElementById('transactionsBody').innerHTML=(d.data||[]).map(t=>`<tr><td>#${t.id}</td><td>User #${t.user_id}</td><td style="color:${t.type==='credit'?'#10b981':'#ef4444'}">${t.type==='credit'?'+':'-'}₹${parseFloat(t.amount).toFixed(2)}</td><td>${t.type}</td><td>${t.source}</td><td><span class="status-badge ${t.status}">${t.status}</span></td></tr>`).join('');}}).catch(()=>{});
         }
         
-        function editBalance(uid,uname,bal){
-            document.getElementById('balUserId').value=uid;
-            document.getElementById('balAmount').value='';
-            document.getElementById('balanceModal').classList.add('active');
-        }
+        function editBalance(uid,uname,bal){document.getElementById('balUserId').value=uid;document.getElementById('balAmount').value='';document.getElementById('balanceModal').classList.add('active')}
         
         function submitBalance(){
-            const uid=document.getElementById('balUserId').value;
-            const amt=parseFloat(document.getElementById('balAmount').value);
-            const type=document.getElementById('balType').value;
+            const uid=document.getElementById('balUserId').value;const amt=parseFloat(document.getElementById('balAmount').value);const type=document.getElementById('balType').value;
             if(!uid||!amt||amt<=0){showToast('Enter valid amount','error');return}
             fetch('?ajax=1&action=update_balance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:parseInt(uid),amount:amt,type:type,reason:'Admin adjustment'})}).then(handleApiResponse).then(d=>{if(d.success){showToast('Balance updated!','success');closeModal('balanceModal');loadUsers()}else showToast(d.message||'Failed','error')}).catch(()=>showToast('Error','error'));
         }
         
-        function toggleUser(uid){
-            if(!confirm('Toggle user status?'))return;
-            fetch('?ajax=1&action=toggle_user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})}).then(handleApiResponse).then(d=>{if(d.success){showToast('Status toggled','success');loadUsers()}else showToast(d.message||'Failed','error')}).catch(()=>showToast('Error','error'));
-        }
+        function toggleUser(uid){if(!confirm('Toggle user status?'))return;fetch('?ajax=1&action=toggle_user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})}).then(handleApiResponse).then(d=>{if(d.success){showToast('Status toggled','success');loadUsers()}else showToast(d.message||'Failed','error')}).catch(()=>showToast('Error','error'));}
     </script>
     <?php endif; ?>
 </body>
