@@ -1,7 +1,7 @@
 -- ======================================================
--- DATABASE SCHEMA - COMPLETE WITH TOURNAMENT SYSTEM
+-- DATABASE SCHEMA - COMPLETE WITH CUSTOM ADMIN
 -- Ludo Tournament Platform - Production Ready
--- Version: 6.0.0 - TOURNAMENT SYSTEM + ALL TABLES
+-- Version: 6.0.2 - AAKASHHUNMINE ADMIN + ALL TABLES
 -- ======================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS `sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 3. TOURNAMENTS TABLE (UPDATED WITH TOURNAMENT SYSTEM)
+-- 3. TOURNAMENTS TABLE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `tournaments` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS `tournaments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 4. TOURNAMENT REGISTRATIONS TABLE (NEW)
+-- 4. TOURNAMENT REGISTRATIONS TABLE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `tournament_registrations` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS `tournament_registrations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 5. TOURNAMENT MATCHES TABLE (NEW)
+-- 5. TOURNAMENT MATCHES TABLE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `tournament_matches` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -266,7 +266,7 @@ CREATE TABLE IF NOT EXISTS `game_actions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- 9-15. REMAINING TABLES (KYC, WITHDRAWALS, DISPUTES, ETC.)
+-- 9. KYC DOCUMENTS TABLE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS `kyc_documents` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
@@ -292,6 +292,9 @@ CREATE TABLE IF NOT EXISTS `kyc_documents` (
     CONSTRAINT `fk_kyc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 10. WITHDRAWALS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `withdrawals` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `user_id` INT(11) NOT NULL,
@@ -315,6 +318,9 @@ CREATE TABLE IF NOT EXISTS `withdrawals` (
     CONSTRAINT `fk_withdrawals_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 11. DISPUTE TICKETS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `dispute_tickets` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `match_id` INT(11) NOT NULL,
@@ -341,6 +347,9 @@ CREATE TABLE IF NOT EXISTS `dispute_tickets` (
     CONSTRAINT `fk_dispute_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 12. TICKET MESSAGES TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `ticket_messages` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `ticket_id` INT(11) NOT NULL,
@@ -354,6 +363,9 @@ CREATE TABLE IF NOT EXISTS `ticket_messages` (
     CONSTRAINT `fk_ticket_message_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `dispute_tickets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 13. SYSTEM SETTINGS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `system_settings` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `setting_key` VARCHAR(100) NOT NULL,
@@ -368,6 +380,9 @@ CREATE TABLE IF NOT EXISTS `system_settings` (
     UNIQUE KEY `uk_setting_key` (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 14. REFERRAL BONUSES TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `referral_bonuses` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `referrer_id` INT(11) NOT NULL,
@@ -381,6 +396,9 @@ CREATE TABLE IF NOT EXISTS `referral_bonuses` (
     CONSTRAINT `fk_referral_referrer` FOREIGN KEY (`referrer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 15. TDS TRANSACTIONS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `tds_transactions` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `user_id` INT(11) NOT NULL,
@@ -396,6 +414,9 @@ CREATE TABLE IF NOT EXISTS `tds_transactions` (
     CONSTRAINT `fk_tds_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 16. LEADERBOARD TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `leaderboard` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `user_id` INT(11) NOT NULL,
@@ -410,6 +431,9 @@ CREATE TABLE IF NOT EXISTS `leaderboard` (
     KEY `idx_elo_rating` (`elo_rating` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 17. MAINTENANCE LOGS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `maintenance_logs` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `action` VARCHAR(100) NOT NULL,
@@ -421,6 +445,9 @@ CREATE TABLE IF NOT EXISTS `maintenance_logs` (
     KEY `idx_action` (`action`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 18. ADMIN AUDIT LOG TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `admin_audit_log` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `admin_id` INT(11) NOT NULL,
@@ -436,6 +463,9 @@ CREATE TABLE IF NOT EXISTS `admin_audit_log` (
     KEY `idx_admin_id` (`admin_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 19. FINANCIAL METRICS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `financial_metrics` (
     `id` INT(11) NOT NULL AUTO_INCREMENT,
     `metric_date` DATE NOT NULL,
@@ -454,6 +484,9 @@ CREATE TABLE IF NOT EXISTS `financial_metrics` (
     KEY `idx_metric_date` (`metric_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ==============================================
+-- 20. WEBSOCKET SESSIONS TABLE
+-- ==============================================
 CREATE TABLE IF NOT EXISTS `websocket_sessions` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `socket_id` VARCHAR(255) NOT NULL,
@@ -469,40 +502,38 @@ CREATE TABLE IF NOT EXISTS `websocket_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- DEFAULT SYSTEM SETTINGS
+-- DEFAULT SYSTEM SETTINGS (16 SEPARATE INSERTS)
 -- ==============================================
-INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES
-('site_name', 'Ludo Tournament Pro', 'general', 'string', 'Website name', 1),
-('platform_fee', '15', 'financial', 'decimal', 'Platform commission percentage', 1),
-('min_entry_fee', '1', 'financial', 'integer', 'Minimum entry fee', 1),
-('max_entry_fee', '10000', 'financial', 'integer', 'Maximum entry fee', 1),
-('session_timeout', '1800', 'system', 'integer', 'Session timeout', 1),
-('max_login_attempts', '5', 'system', 'integer', 'Max failed logins', 1),
-('maintenance_mode', '0', 'system', 'boolean', 'Maintenance mode', 1),
-('maintenance_message', 'We are currently performing scheduled maintenance.', 'system', 'text', 'Maintenance message', 1),
-('referral_bonus', '50', 'financial', 'integer', 'Referral bonus', 1),
-('min_withdrawal', '10', 'financial', 'integer', 'Min withdrawal', 1),
-('max_withdrawal', '50000', 'financial', 'integer', 'Max withdrawal', 1),
-('tds_rate', '30', 'financial', 'decimal', 'TDS rate', 1),
-('tds_threshold', '10000', 'financial', 'integer', 'TDS threshold', 1),
-('game_timeout', '15', 'gameplay', 'integer', 'Turn timeout', 1),
-('max_turns', '50', 'gameplay', 'integer', 'Max turns', 1),
-('elo_k_factor', '32', 'gameplay', 'integer', 'ELO K-factor', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('site_name', 'Ludo Tournament Pro', 'general', 'string', 'Website name', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('platform_fee', '15', 'financial', 'decimal', 'Platform commission percentage', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('min_entry_fee', '1', 'financial', 'integer', 'Minimum entry fee', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('max_entry_fee', '10000', 'financial', 'integer', 'Maximum entry fee', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('session_timeout', '1800', 'system', 'integer', 'Session timeout', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('max_login_attempts', '5', 'system', 'integer', 'Max failed logins', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('maintenance_mode', '0', 'system', 'boolean', 'Maintenance mode', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('maintenance_message', 'We are currently performing scheduled maintenance.', 'system', 'text', 'Maintenance message', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('referral_bonus', '50', 'financial', 'integer', 'Referral bonus', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('min_withdrawal', '10', 'financial', 'integer', 'Min withdrawal', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('max_withdrawal', '50000', 'financial', 'integer', 'Max withdrawal', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('tds_rate', '30', 'financial', 'decimal', 'TDS rate', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('tds_threshold', '10000', 'financial', 'integer', 'TDS threshold', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('game_timeout', '15', 'gameplay', 'integer', 'Turn timeout', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('max_turns', '50', 'gameplay', 'integer', 'Max turns', 1);
+INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('elo_k_factor', '32', 'gameplay', 'integer', 'ELO K-factor', 1);
 
 -- ==============================================
--- ADMIN USER (Default password: password)
+-- ADMIN USER: Aakashhunmine / Aakashhunmine@8090
+-- Password BCrypt Hash generated with: password_hash('Aakashhunmine@8090', PASSWORD_DEFAULT)
 -- ==============================================
 INSERT INTO `users` (`username`, `mobile`, `email`, `password_hash`, `is_admin`, `is_verified`, `is_active`, `refer_code`, `created_at`) 
-VALUES ('admin', '9999999999', 'admin@yourdomain.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1, 1, 1, 'ADMIN001', CURRENT_TIMESTAMP)
-ON DUPLICATE KEY UPDATE is_admin = 1;
+VALUES ('Aakashhunmine', '9999999998', 'admin@ludopro.com', '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 1, 1, 1, 'ADMIN001', CURRENT_TIMESTAMP);
 
 -- ==============================================
--- SAMPLE TOURNAMENTS
+-- SAMPLE TOURNAMENTS (3 SEPARATE INSERTS)
 -- ==============================================
-INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES
-('T1001', '₹10 Beginner Cup', '1vs1', 10.00, 0.00, 0.00, 2, 300, 2, 60.00, 30.00, 10.00, 'scheduled', 1, NOW()),
-('T1002', '₹50 Pro League', '1vs1', 50.00, 0.00, 0.00, 2, 200, 2, 55.00, 30.00, 15.00, 'scheduled', 1, NOW()),
-('T1003', '₹100 Mega Battle', '1vs4', 100.00, 0.00, 0.00, 4, 100, 4, 60.00, 25.00, 15.00, 'scheduled', 1, NOW());
+INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1001', '₹10 Beginner Cup', '1vs1', 10.00, 0.00, 0.00, 2, 300, 2, 60.00, 30.00, 10.00, 'scheduled', 1, NOW());
+INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1002', '₹50 Pro League', '1vs1', 50.00, 0.00, 0.00, 2, 200, 2, 55.00, 30.00, 15.00, 'scheduled', 1, NOW());
+INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1003', '₹100 Mega Battle', '1vs4', 100.00, 0.00, 0.00, 4, 100, 4, 60.00, 25.00, 15.00, 'scheduled', 1, NOW());
 
 -- ==============================================
 -- INDEXES FOR PERFORMANCE
