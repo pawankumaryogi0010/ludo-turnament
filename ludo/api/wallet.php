@@ -2,8 +2,8 @@
 /**
  * ======================================================
  * WALLET.PHP - Atomic Wallet Operations (FIXED)
- * Ludo Tournament Platform - Row Locking + Session Fix
- * Version: 2.0.0 - COMPLETE REWRITE
+ * Ludo Tournament Platform - Row Locking + Auth Fix
+ * Version: 2.1.0 - SESSION AUTH FIX + 401 FIX
  * ======================================================
  */
 
@@ -41,13 +41,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// FIXED: Better auth check
+// ==============================================
+// FIXED: AUTH CHECK WITH PROPER 401 RESPONSE
+// ==============================================
 if (!isLoggedIn()) {
     jsonResponse(false, 'Please login first', [], 401);
 }
 
 $userId = getCurrentUserId();
-if (!$userId) {
+if (!$userId || $userId <= 0) {
     jsonResponse(false, 'Invalid session', [], 401);
 }
 
@@ -56,7 +58,7 @@ $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 
-// FIXED: Skip CSRF for balance check (GET request)
+// Skip CSRF for balance check (GET request)
 if (!CSRFToken::validate($csrfToken) && $action !== 'balance') {
     jsonResponse(false, 'Invalid CSRF token', [], 403);
 }
@@ -108,6 +110,7 @@ function handleGetBalance(int $userId): void
         ]);
 
     } catch (PDOException $e) {
+        error_log('Wallet balance error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -188,6 +191,7 @@ function handleDeposit(int $userId, array $input): void
 
     } catch (PDOException $e) {
         if ($db->inTransaction()) $db->rollback();
+        error_log('Wallet deposit error: ' . $e->getMessage());
         jsonResponse(false, 'Deposit failed', [], 500);
     }
 }
@@ -234,7 +238,7 @@ function handleWithdraw(int $userId, array $input): void
             jsonResponse(false, 'User not found or inactive', [], 404);
         }
 
-        // FIXED: Check KYC
+        // Check KYC
         if ($user['kyc_status'] !== 'verified') {
             $db->rollback();
             jsonResponse(false, 'KYC verification required for withdrawal', [], 403);
@@ -320,12 +324,13 @@ function handleWithdraw(int $userId, array $input): void
 
     } catch (PDOException $e) {
         if ($db->inTransaction()) $db->rollback();
+        error_log('Wallet withdraw error: ' . $e->getMessage());
         jsonResponse(false, 'Withdrawal failed', [], 500);
     }
 }
 
 // ==============================================
-// TRANSACTION HISTORY
+// TRANSACTION HISTORY (FIXED - PROPER 401)
 // ==============================================
 function handleGetHistory(int $userId): void
 {
@@ -364,6 +369,15 @@ function handleGetHistory(int $userId): void
         $stmt->execute($params);
         $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Convert numeric fields
+        foreach ($transactions as &$tx) {
+            $tx['amount'] = floatval($tx['amount'] ?? 0);
+            $tx['balance_before'] = floatval($tx['balance_before'] ?? 0);
+            $tx['balance_after'] = floatval($tx['balance_after'] ?? 0);
+            $tx['tds_deducted'] = floatval($tx['tds_deducted'] ?? 0);
+        }
+        unset($tx);
+
         jsonResponse(true, 'Transaction history retrieved', [
             'transactions' => $transactions ?: [],
             'total' => $total,
@@ -372,7 +386,7 @@ function handleGetHistory(int $userId): void
         ]);
 
     } catch (PDOException $e) {
+        error_log('Wallet history error: ' . $e->getMessage());
         jsonResponse(false, 'Error fetching history', [], 500);
     }
 }
-?>
