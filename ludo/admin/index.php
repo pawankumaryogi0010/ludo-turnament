@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * ADMIN INDEX.PHP - Pro Command Center (FIXED)
+ * ADMIN INDEX.PHP - Pro Command Center (FULL FIXED)
  * Ludo Tournament Platform - Admin Dashboard
- * Version: 5.0.0 - ADMIN LOGIN FULLY FIXED
+ * Version: 5.1.0 - ADMIN LOGIN FIX + SESSION FIX
  * ======================================================
  */
 
@@ -58,17 +58,6 @@ if (!$isAdminLoggedIn && isset($_POST['admin_login'])) {
         try {
             $db = Database::getInstance();
             $conn = $db->getConnection();
-            
-            // FIXED: Debug - agar login fail ho raha hai toh comment hatao
-            /*
-            $testStmt = $conn->prepare("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username = :uname");
-            $testStmt->execute([':uname' => $username]);
-            $testUser = $testStmt->fetch(PDO::FETCH_ASSOC);
-            error_log('Login attempt: ' . $username . ' - User found: ' . ($testUser ? 'YES' : 'NO'));
-            if ($testUser) {
-                error_log('Password verify: ' . (password_verify($password, $testUser['password_hash']) ? 'YES' : 'NO'));
-            }
-            */
             
             $stmt = $conn->prepare("SELECT id, username, password_hash, is_admin, is_active FROM users WHERE username = :uname AND is_admin = 1");
             $stmt->execute([':uname' => $username]);
