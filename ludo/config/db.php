@@ -1,9 +1,9 @@
 <?php
 /**
  * ======================================================
- * DATABASE CONFIGURATION & CORE SECURITY - COMPLETELY FIXED
+ * DATABASE CONFIGURATION & CORE SECURITY - FIXED
  * Ludo Tournament Platform - Production Ready
- * Version: 6.0.1 - ALL FIXES APPLIED
+ * Version: 6.0.2 - SESSION_TIMEOUT + AUTH FIXES
  * ======================================================
  */
 
@@ -52,13 +52,21 @@ date_default_timezone_set(TIMEZONE);
 // ======================================================
 if (ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+    ini_set('log_errors', 1);
+    ini_set('error_log', __DIR__ . '/../logs/php_errors.log');
 } else {
     error_reporting(0);
     ini_set('display_errors', 0);
     ini_set('log_errors', 1);
     ini_set('error_log', __DIR__ . '/../logs/php_errors.log');
+}
+
+// Create logs directory if not exists
+$logDir = __DIR__ . '/../logs';
+if (!is_dir($logDir)) {
+    mkdir($logDir, 0755, true);
 }
 
 // ======================================================
@@ -91,7 +99,8 @@ class Database
             );
             $this->connection = new PDO($dsn, DB_USER, DB_PASS, $this->options);
         } catch (PDOException $e) {
-            $this->handleError("Database connection failed", $e);
+            error_log('Database connection failed: ' . $e->getMessage());
+            throw new PDOException("Database connection failed. Please try again later.");
         }
     }
 
@@ -228,10 +237,6 @@ class Database
 
     private function handleError(string $message, PDOException $e, ?string $sql = null, ?array $params = null): void
     {
-        if (ENVIRONMENT === 'development') {
-            throw new PDOException($e->getMessage() . " [SQL: " . $sql . "]");
-        }
-
         $errorLog = [
             'timestamp' => date('Y-m-d H:i:s'),
             'message' => $message,
@@ -245,12 +250,11 @@ class Database
         ];
 
         $logFile = __DIR__ . '/../logs/db_errors.log';
-        $logDir = dirname($logFile);
-        if (!is_dir($logDir)) {
-            mkdir($logDir, 0755, true);
-        }
         file_put_contents($logFile, json_encode($errorLog) . PHP_EOL, FILE_APPEND | LOCK_EX);
 
+        if (ENVIRONMENT === 'development') {
+            throw new PDOException($e->getMessage() . " [SQL: " . $sql . "]");
+        }
         throw new PDOException("Database error occurred. Please try again later.");
     }
 }
@@ -266,19 +270,19 @@ class SessionManager
             return true;
         }
 
-        $cookieParams = session_get_cookie_params();
         $isLocalhost = in_array(
             $_SERVER['HTTP_HOST'] ?? '',
             ['localhost', '127.0.0.1', '::1']
         ) || strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
 
         $secure = !$isLocalhost && isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-        $domain = (!$isLocalhost) ? ($cookieParams['domain'] ?? '') : '';
+
+        $timeout = defined('SESSION_TIMEOUT') ? SESSION_TIMEOUT : 1800;
 
         session_set_cookie_params([
-            'lifetime' => SESSION_TIMEOUT,
+            'lifetime' => $timeout,
             'path' => '/',
-            'domain' => $domain,
+            'domain' => '',
             'secure' => $secure,
             'httponly' => true,
             'samesite' => $isLocalhost ? 'Lax' : 'Strict',
@@ -455,7 +459,6 @@ if (!function_exists('jsonResponse')) {
 
 function isLoggedIn(): bool
 {
-    // FIX: Also check session directly (more reliable than SessionManager alone)
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
@@ -468,7 +471,6 @@ function isLoggedIn(): bool
 
 function getCurrentUserId(): ?int
 {
-    // FIX: Check both SessionManager and direct $_SESSION
     $userId = SessionManager::get('user_id');
     if ($userId === null || $userId === '') {
         $userId = $_SESSION['user_id'] ?? null;
@@ -517,4 +519,3 @@ function isAdminLoggedIn(): bool
 // INITIALIZE SESSION
 // ======================================================
 SessionManager::init();
-?>
