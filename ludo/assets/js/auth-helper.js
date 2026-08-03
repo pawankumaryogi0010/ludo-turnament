@@ -1,7 +1,8 @@
 /**
- * Auth helper - Full implementation
+ * Auth helper - Fixed Version
  * Path: assets/js/auth-helper.js
  * Exposes: AuthHelper.register/login/check/logout/getCsrfToken
+ * Version: 2.1.0 - FLAT RESPONSE STRUCTURE FIX
  */
 
 const AuthHelper = (() => {
@@ -58,7 +59,6 @@ const AuthHelper = (() => {
                 localStorage.setItem('csrf_token', _csrfToken);
                 return _csrfToken;
             }
-            // parse defensively
             if (text.trim().startsWith('{')) {
                 const data = JSON.parse(text);
                 if (data.success && data.data && data.data.csrf_token) {
@@ -68,7 +68,6 @@ const AuthHelper = (() => {
                     return _csrfToken;
                 }
             }
-            // fallback
             _csrfToken = generateFallbackToken();
             localStorage.setItem('csrf_token', _csrfToken);
             return _csrfToken;
@@ -87,7 +86,6 @@ const AuthHelper = (() => {
     // Register
     const register = async ({ username, mobile, password, email = '', referral_code = '' }) => {
         try {
-            // client-side validation
             if (!username || username.length < 3) return { success: false, message: 'Username must be at least 3 characters' };
             if (!mobile || !/^[0-9]{10}$/.test(mobile)) return { success: false, message: 'Please enter a valid 10-digit mobile number' };
             if (!password || password.length < 6) return { success: false, message: 'Password must be at least 6 characters' };
@@ -118,10 +116,20 @@ const AuthHelper = (() => {
             }
 
             const data = JSON.parse(text);
+            
+            // FIXED: Accept flat structure - data.data.user is the user object
             if (data.success && data.data && data.data.user) {
                 storeUserData(data.data.user);
                 if (data.data.csrf_token) {
                     _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                }
+            }
+            // FIXED: Also accept data.data as user directly (if API returns flat)
+            if (data.success && data.data && data.data.id) {
+                storeUserData(data.data);
+                if (data.csrf_token) {
+                    _csrfToken = data.csrf_token;
                     localStorage.setItem('csrf_token', _csrfToken);
                 }
             }
@@ -156,10 +164,20 @@ const AuthHelper = (() => {
             }
 
             const data = JSON.parse(text);
+            
+            // FIXED: Accept flat structure - data.data.user is the user object
             if (data.success && data.data && data.data.user) {
                 storeUserData(data.data.user);
                 if (data.data.csrf_token) {
                     _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                }
+            }
+            // FIXED: Also accept data.data as user directly
+            if (data.success && data.data && data.data.id) {
+                storeUserData(data.data);
+                if (data.csrf_token) {
+                    _csrfToken = data.csrf_token;
                     localStorage.setItem('csrf_token', _csrfToken);
                 }
             }
@@ -170,7 +188,7 @@ const AuthHelper = (() => {
         }
     };
 
-    // Logout - informs server and clears local state
+    // Logout
     const logout = async () => {
         try {
             const csrf = await getCsrfToken();
@@ -192,7 +210,7 @@ const AuthHelper = (() => {
         }
     };
 
-    // Check auth status (local-first, then server verify)
+    // Check auth status
     const checkAuth = async () => {
         try {
             const storedUser = localStorage.getItem('user');
@@ -213,8 +231,18 @@ const AuthHelper = (() => {
             if (!text || !text.trim().startsWith('{')) return { success: false, isLoggedIn: false };
 
             const data = JSON.parse(text);
-            // Accept either data.isLoggedIn or data.success + data.data.user
-            if (data.success && (data.isLoggedIn || data.data?.user)) {
+            
+            // FIXED: Accept flat structure from new auth.php
+            if (data.success && data.data && data.data.logged_in === true && data.data.user) {
+                storeUserData(data.data.user);
+                if (data.data.csrf_token) {
+                    _csrfToken = data.data.csrf_token;
+                    localStorage.setItem('csrf_token', _csrfToken);
+                }
+                return { success: true, isLoggedIn: true, user: data.data.user };
+            }
+            // FIXED: Also check if data itself has logged_in
+            if (data.success && data.isLoggedIn === true) {
                 const userObj = data.data?.user || data.user || {};
                 storeUserData(userObj);
                 return { success: true, isLoggedIn: true, user: userObj };
