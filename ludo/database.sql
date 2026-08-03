@@ -1,7 +1,8 @@
 -- ======================================================
 -- DATABASE SCHEMA - COMPLETE WITH CUSTOM ADMIN
 -- Ludo Tournament Platform - Production Ready
--- Version: 6.0.2 - AAKASHHUNMINE ADMIN + ALL TABLES
+-- Version: 6.0.3 - FIXED ADMIN PASSWORD HASH
+-- Admin: Aakashhunmine / Aakashhunmine@8090
 -- ======================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -502,7 +503,7 @@ CREATE TABLE IF NOT EXISTS `websocket_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==============================================
--- DEFAULT SYSTEM SETTINGS (16 SEPARATE INSERTS)
+-- DEFAULT SYSTEM SETTINGS
 -- ==============================================
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('site_name', 'Ludo Tournament Pro', 'general', 'string', 'Website name', 1);
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, `setting_type`, `description`, `is_editable`) VALUES ('platform_fee', '15', 'financial', 'decimal', 'Platform commission percentage', 1);
@@ -523,20 +524,20 @@ INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, 
 
 -- ==============================================
 -- ADMIN USER: Aakashhunmine / Aakashhunmine@8090
--- Password BCrypt Hash generated with: password_hash('Aakashhunmine@8090', PASSWORD_DEFAULT)
+-- Password Hash: $2y$19$J6Sz6sgXSA3s9kbOZayFWea8OxRqx2.bTV3FyhSXr5JT9FkP/sMK.
 -- ==============================================
 INSERT INTO `users` (`username`, `mobile`, `email`, `password_hash`, `is_admin`, `is_verified`, `is_active`, `refer_code`, `created_at`) 
-VALUES ('Aakashhunmine', '9999999998', 'admin@ludopro.com', '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 1, 1, 1, 'ADMIN001', CURRENT_TIMESTAMP);
+VALUES ('Aakashhunmine', '9999999998', 'admin@ludopro.com', '$2y$19$J6Sz6sgXSA3s9kbOZayFWea8OxRqx2.bTV3FyhSXr5JT9FkP/sMK.', 1, 1, 1, 'ADMIN001', CURRENT_TIMESTAMP);
 
 -- ==============================================
--- SAMPLE TOURNAMENTS (3 SEPARATE INSERTS)
+-- SAMPLE TOURNAMENTS
 -- ==============================================
 INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1001', '₹10 Beginner Cup', '1vs1', 10.00, 0.00, 0.00, 2, 300, 2, 60.00, 30.00, 10.00, 'scheduled', 1, NOW());
 INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1002', '₹50 Pro League', '1vs1', 50.00, 0.00, 0.00, 2, 200, 2, 55.00, 30.00, 15.00, 'scheduled', 1, NOW());
 INSERT INTO `tournaments` (`tournament_code`, `name`, `game_mode`, `entry_fee`, `prize_pool`, `platform_fee`, `max_players`, `total_players`, `min_players`, `first_prize_percent`, `second_prize_percent`, `third_prize_percent`, `status`, `created_by`, `created_at`) VALUES ('T1003', '₹100 Mega Battle', '1vs4', 100.00, 0.00, 0.00, 4, 100, 4, 60.00, 25.00, 15.00, 'scheduled', 1, NOW());
 
 -- ==============================================
--- INDEXES FOR PERFORMANCE
+-- INDEXES
 -- ==============================================
 CREATE INDEX IF NOT EXISTS idx_matches_status_created ON matches(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_status ON transactions(user_id, status);
@@ -562,7 +563,3 @@ END$$
 DELIMITER ;
 
 COMMIT;
-
--- ==============================================
--- END OF COMPLETE DATABASE SCHEMA
--- ==============================================
