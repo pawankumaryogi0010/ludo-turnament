@@ -3,7 +3,7 @@
  * ======================================================
  * TOURNAMENT_SYSTEM.PHP - Complete Tournament API (FIXED)
  * Ludo Tournament Platform - Multiplayer Tournament System
- * Version: 1.0.1 - ALLOW LISTING WITHOUT LOGIN
+ * Version: 1.1.0 - 500 ERROR FIX + CONSTANT FIX
  * ======================================================
  */
 
@@ -26,79 +26,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// FIXED: Don't force login for listing - only for actions that need it
+// Database connection
+try {
+    $db = Database::getInstance();
+    $conn = $db->getConnection();
+} catch (Exception $e) {
+    error_log('Tournament DB Error: ' . $e->getMessage());
+    jsonResponse(false, 'Database connection error', [], 500);
+}
+
+// Auth - flexible: allow listing without login
 $userId = null;
 if (isLoggedIn()) {
     $userId = getCurrentUserId();
 }
 
+// FIXED: Define PLATFORM_FEE if not already defined
+if (!defined('PLATFORM_FEE')) {
+    define('PLATFORM_FEE', 15);
+}
+
 // ROUTING
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
-switch ($action) {
-    // PUBLIC: Anyone can view
-    case 'list_active':
-        handleListActiveTournaments();
-        break;
-    case 'get_tournament':
-        handleGetTournament();
-        break;
-    
-    // REQUIRE LOGIN
-    case 'register':
-        requireLogin();
-        handleRegisterForTournament();
-        break;
-    case 'my_registrations':
-        requireLogin();
-        handleMyRegistrations();
-        break;
-    
-    // ADMIN ONLY
-    case 'admin_create':
-        requireLogin();
-        handleAdminCreateTournament();
-        break;
-    case 'admin_update':
-        requireLogin();
-        handleAdminUpdateTournament();
-        break;
-    case 'admin_delete':
-        requireLogin();
-        handleAdminDeleteTournament();
-        break;
-    case 'admin_start':
-        requireLogin();
-        handleAdminStartTournament();
-        break;
-    case 'admin_end':
-        requireLogin();
-        handleAdminEndTournament();
-        break;
-    case 'admin_distribute_prizes':
-        requireLogin();
-        handleAdminDistributePrizes();
-        break;
-    
-    default:
-        jsonResponse(false, 'Invalid action', [], 400);
-}
-
-// FIXED: Helper function for login check
-function requireLogin() {
-    global $userId;
-    if (!$userId) {
-        jsonResponse(false, 'Please login first', [], 401);
+try {
+    switch ($action) {
+        // PUBLIC
+        case 'list_active':
+            handleListActiveTournaments();
+            break;
+        case 'get_tournament':
+            handleGetTournament();
+            break;
+        
+        // REQUIRE LOGIN
+        case 'register':
+            if (!$userId) { jsonResponse(false, 'Please login first', [], 401); }
+            handleRegisterForTournament();
+            break;
+        case 'my_registrations':
+            if (!$userId) { jsonResponse(false, 'Please login first', [], 401); }
+            handleMyRegistrations();
+            break;
+        
+        // ADMIN ONLY
+        case 'admin_create':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminCreateTournament();
+            break;
+        case 'admin_update':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminUpdateTournament();
+            break;
+        case 'admin_delete':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminDeleteTournament();
+            break;
+        case 'admin_start':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminStartTournament();
+            break;
+        case 'admin_end':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminEndTournament();
+            break;
+        case 'admin_distribute_prizes':
+            if (!isAdminLoggedIn()) { jsonResponse(false, 'Admin access required', [], 403); }
+            handleAdminDistributePrizes();
+            break;
+        
+        default:
+            jsonResponse(false, 'Invalid action', [], 400);
     }
+} catch (Exception $e) {
+    error_log('Tournament API Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    jsonResponse(false, 'Server error: ' . $e->getMessage(), [], 500);
 }
 
 // ==============================================
-// LIST ACTIVE TOURNAMENTS (PUBLIC)
+// LIST ACTIVE TOURNAMENTS (PUBLIC - FIXED)
 // ==============================================
 function handleListActiveTournaments() {
     global $conn;
     
     try {
+        // FIXED: Check if connection exists
+        if (!$conn) {
+            $db = Database::getInstance();
+            $conn = $db->getConnection();
+        }
+        
         $stmt = $conn->prepare("
             SELECT t.*, u.username as created_by_name,
                    (SELECT COUNT(*) FROM tournament_registrations WHERE tournament_id = t.id) as registered_count
@@ -110,16 +127,28 @@ function handleListActiveTournaments() {
         $stmt->execute();
         $tournaments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
+        // Convert numeric fields
+        foreach ($tournaments as &$t) {
+            $t['entry_fee'] = floatval($t['entry_fee'] ?? 0);
+            $t['prize_pool'] = floatval($t['prize_pool'] ?? 0);
+            $t['platform_fee'] = floatval($t['platform_fee'] ?? 0);
+            $t['first_prize_percent'] = floatval($t['first_prize_percent'] ?? 60);
+            $t['second_prize_percent'] = floatval($t['second_prize_percent'] ?? 30);
+            $t['third_prize_percent'] = floatval($t['third_prize_percent'] ?? 10);
+        }
+        unset($t);
+        
         jsonResponse(true, 'Active tournaments retrieved', [
             'tournaments' => $tournaments ?: []
         ]);
     } catch (PDOException $e) {
+        error_log('List tournaments error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
 
 // ==============================================
-// GET SINGLE TOURNAMENT DETAILS (PUBLIC)
+// GET SINGLE TOURNAMENT DETAILS (PUBLIC - FIXED)
 // ==============================================
 function handleGetTournament() {
     global $conn;
@@ -130,6 +159,11 @@ function handleGetTournament() {
     }
     
     try {
+        if (!$conn) {
+            $db = Database::getInstance();
+            $conn = $db->getConnection();
+        }
+        
         $stmt = $conn->prepare("
             SELECT t.*, u.username as created_by_name,
                    (SELECT COUNT(*) FROM tournament_registrations WHERE tournament_id = t.id) as registered_count
@@ -144,19 +178,25 @@ function handleGetTournament() {
             jsonResponse(false, 'Tournament not found', [], 404);
         }
         
-        // Calculate prize distribution
-        $totalPool = $tournament['entry_fee'] * $tournament['total_players'];
-        $platformFee = $totalPool * (PLATFORM_FEE / 100);
+        // Convert numeric fields
+        $tournament['entry_fee'] = floatval($tournament['entry_fee'] ?? 0);
+        $tournament['prize_pool'] = floatval($tournament['prize_pool'] ?? 0);
+        
+        // FIXED: Use defined constant safely
+        $platformFeePercent = defined('PLATFORM_FEE') ? PLATFORM_FEE : 15;
+        $totalPool = $tournament['entry_fee'] * intval($tournament['total_players'] ?? 100);
+        $platformFee = $totalPool * ($platformFeePercent / 100);
         $netPool = $totalPool - $platformFee;
         
-        $tournament['calculated_first_prize'] = round($netPool * ($tournament['first_prize_percent'] / 100), 2);
-        $tournament['calculated_second_prize'] = round($netPool * ($tournament['second_prize_percent'] / 100), 2);
-        $tournament['calculated_third_prize'] = round($netPool * ($tournament['third_prize_percent'] / 100), 2);
+        $tournament['calculated_first_prize'] = round($netPool * (floatval($tournament['first_prize_percent'] ?? 60) / 100), 2);
+        $tournament['calculated_second_prize'] = round($netPool * (floatval($tournament['second_prize_percent'] ?? 30) / 100), 2);
+        $tournament['calculated_third_prize'] = round($netPool * (floatval($tournament['third_prize_percent'] ?? 10) / 100), 2);
         $tournament['total_pool'] = round($totalPool, 2);
         $tournament['platform_fee_amount'] = round($platformFee, 2);
         
         jsonResponse(true, 'Tournament details retrieved', ['tournament' => $tournament]);
     } catch (PDOException $e) {
+        error_log('Get tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -165,7 +205,8 @@ function handleGetTournament() {
 // REGISTER FOR TOURNAMENT (LOGIN REQUIRED)
 // ==============================================
 function handleRegisterForTournament() {
-    global $db, $conn, $userId;
+    global $db, $conn;
+    $userId = getCurrentUserId();
     
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input || !isset($input['tournament_id'])) {
@@ -182,7 +223,6 @@ function handleRegisterForTournament() {
     try {
         $db->beginTransaction();
         
-        // Get tournament with lock
         $stmt = $conn->prepare("SELECT * FROM tournaments WHERE id = :tid FOR UPDATE");
         $stmt->execute([':tid' => $tournamentId]);
         $tournament = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -197,7 +237,7 @@ function handleRegisterForTournament() {
             jsonResponse(false, 'Registration is closed for this tournament', [], 400);
         }
         
-        // Check if already registered
+        // Check already registered
         $stmt = $conn->prepare("SELECT id FROM tournament_registrations WHERE tournament_id = :tid AND user_id = :uid");
         $stmt->execute([':tid' => $tournamentId, ':uid' => $userId]);
         if ($stmt->fetch()) {
@@ -205,35 +245,36 @@ function handleRegisterForTournament() {
             jsonResponse(false, 'You are already registered', [], 409);
         }
         
-        // Check if tournament is full
+        // Check full
         $stmt = $conn->prepare("SELECT COUNT(*) FROM tournament_registrations WHERE tournament_id = :tid");
         $stmt->execute([':tid' => $tournamentId]);
         $registeredCount = intval($stmt->fetchColumn());
         
-        if ($registeredCount >= $tournament['total_players']) {
+        if ($registeredCount >= intval($tournament['total_players'] ?? 100)) {
             $db->rollback();
             jsonResponse(false, 'Tournament is full', [], 409);
         }
         
-        // Check wallet balance
+        // Check wallet
         $stmt = $conn->prepare("SELECT wallet_balance FROM users WHERE id = :uid FOR UPDATE");
         $stmt->execute([':uid' => $userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($user['wallet_balance'] < $tournament['entry_fee']) {
+        if (floatval($user['wallet_balance'] ?? 0) < floatval($tournament['entry_fee'] ?? 0)) {
             $db->rollback();
-            jsonResponse(false, 'Insufficient balance. Need ₹' . number_format($tournament['entry_fee'], 2), [], 400);
+            jsonResponse(false, 'Insufficient balance. Need ₹' . number_format(floatval($tournament['entry_fee']), 2), [], 400);
         }
         
-        // Deduct entry fee
+        // Deduct fee
+        $entryFee = floatval($tournament['entry_fee']);
         $stmt = $conn->prepare("UPDATE users SET wallet_balance = wallet_balance - :fee WHERE id = :uid");
-        $stmt->execute([':fee' => $tournament['entry_fee'], ':uid' => $userId]);
+        $stmt->execute([':fee' => $entryFee, ':uid' => $userId]);
         
-        // Register user
+        // Register
         $stmt = $conn->prepare("INSERT INTO tournament_registrations (tournament_id, user_id, entry_fee_paid, status) VALUES (:tid, :uid, :fee, 'registered')");
-        $stmt->execute([':tid' => $tournamentId, ':uid' => $userId, ':fee' => $tournament['entry_fee']]);
+        $stmt->execute([':tid' => $tournamentId, ':uid' => $userId, ':fee' => $entryFee]);
         
-        // Update registered count
+        // Update count
         $stmt = $conn->prepare("UPDATE tournaments SET registered_players = registered_players + 1 WHERE id = :tid");
         $stmt->execute([':tid' => $tournamentId]);
         
@@ -241,25 +282,26 @@ function handleRegisterForTournament() {
         $orderId = 'TREG-' . strtoupper(bin2hex(random_bytes(6)));
         $stmt = $conn->prepare("INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at) VALUES (:uid, :tid, :amt, 'debit', 'match_fee', :desc, :oid, 'success', :bb, :ba, CURRENT_TIMESTAMP)");
         $stmt->execute([
-            ':uid' => $userId, ':tid' => $tournamentId, ':amt' => $tournament['entry_fee'],
-            ':desc' => "Tournament registration: {$tournament['name']}",
+            ':uid' => $userId, ':tid' => $tournamentId, ':amt' => $entryFee,
+            ':desc' => "Tournament registration: " . ($tournament['name'] ?? 'Tournament'),
             ':oid' => $orderId,
-            ':bb' => $user['wallet_balance'],
-            ':ba' => $user['wallet_balance'] - $tournament['entry_fee']
+            ':bb' => floatval($user['wallet_balance']),
+            ':ba' => floatval($user['wallet_balance']) - $entryFee
         ]);
         
         $db->commit();
         
         jsonResponse(true, 'Successfully registered for tournament!', [
-            'tournament_name' => $tournament['name'],
-            'entry_fee' => $tournament['entry_fee'],
-            'game_mode' => $tournament['game_mode'],
+            'tournament_name' => $tournament['name'] ?? 'Tournament',
+            'entry_fee' => $entryFee,
+            'game_mode' => $tournament['game_mode'] ?? '1vs1',
             'registered_count' => $registeredCount + 1,
-            'total_players' => $tournament['total_players']
+            'total_players' => intval($tournament['total_players'] ?? 100)
         ]);
         
     } catch (PDOException $e) {
         if ($db->inTransaction()) $db->rollback();
+        error_log('Tournament register error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -268,7 +310,8 @@ function handleRegisterForTournament() {
 // MY REGISTRATIONS (LOGIN REQUIRED)
 // ==============================================
 function handleMyRegistrations() {
-    global $conn, $userId;
+    global $conn;
+    $userId = getCurrentUserId();
     
     try {
         $stmt = $conn->prepare("
@@ -284,6 +327,7 @@ function handleMyRegistrations() {
         
         jsonResponse(true, 'Your registrations', ['registrations' => $registrations ?: []]);
     } catch (PDOException $e) {
+        error_log('My registrations error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -293,10 +337,6 @@ function handleMyRegistrations() {
 // ==============================================
 function handleAdminCreateTournament() {
     global $db, $conn;
-    
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
     
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
@@ -322,9 +362,10 @@ function handleAdminCreateTournament() {
         jsonResponse(false, 'Prize percentages exceed 100%', [], 400);
     }
     
+    $platformFeePercent = defined('PLATFORM_FEE') ? PLATFORM_FEE : 15;
     $maxPlayers = $gameMode === '1vs1' ? 2 : 4;
     $totalPool = $entryFee * $totalPlayers;
-    $platformFee = $totalPool * (PLATFORM_FEE / 100);
+    $platformFee = $totalPool * ($platformFeePercent / 100);
     $prizePool = $totalPool - $platformFee;
     $tournamentCode = 'T' . strtoupper(bin2hex(random_bytes(4)));
     
@@ -341,7 +382,7 @@ function handleAdminCreateTournament() {
             ':fa' => round($prizePool * ($firstPrizePercent/100), 2),
             ':sa' => round($prizePool * ($secondPrizePercent/100), 2),
             ':ta' => round($prizePool * ($thirdPrizePercent/100), 2),
-            ':admin' => $_SESSION['admin_id']
+            ':admin' => $_SESSION['admin_id'] ?? 1
         ]);
         
         jsonResponse(true, 'Tournament created successfully!', [
@@ -353,6 +394,7 @@ function handleAdminCreateTournament() {
             'total_players' => $totalPlayers
         ]);
     } catch (PDOException $e) {
+        error_log('Create tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -362,10 +404,6 @@ function handleAdminCreateTournament() {
 // ==============================================
 function handleAdminUpdateTournament() {
     global $conn;
-    
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
     
     $input = json_decode(file_get_contents('php://input'), true);
     $tournamentId = intval($input['id'] ?? 0);
@@ -391,6 +429,7 @@ function handleAdminUpdateTournament() {
         
         jsonResponse(true, 'Tournament updated');
     } catch (PDOException $e) {
+        error_log('Update tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -400,10 +439,6 @@ function handleAdminUpdateTournament() {
 // ==============================================
 function handleAdminDeleteTournament() {
     global $conn;
-    
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
     
     $tournamentId = intval($_GET['id'] ?? 0);
     if ($tournamentId <= 0) {
@@ -420,6 +455,7 @@ function handleAdminDeleteTournament() {
         
         jsonResponse(true, 'Tournament deleted');
     } catch (PDOException $e) {
+        error_log('Delete tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -429,10 +465,6 @@ function handleAdminDeleteTournament() {
 // ==============================================
 function handleAdminStartTournament() {
     global $conn;
-    
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
     
     $tournamentId = intval($_POST['id'] ?? $_GET['id'] ?? 0);
     
@@ -446,6 +478,7 @@ function handleAdminStartTournament() {
         
         jsonResponse(true, 'Tournament started!');
     } catch (PDOException $e) {
+        error_log('Start tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -456,10 +489,6 @@ function handleAdminStartTournament() {
 function handleAdminEndTournament() {
     global $conn;
     
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
-    
     $tournamentId = intval($_POST['id'] ?? $_GET['id'] ?? 0);
     
     try {
@@ -467,6 +496,7 @@ function handleAdminEndTournament() {
         $stmt->execute([':id' => $tournamentId]);
         jsonResponse(true, 'Tournament ended');
     } catch (PDOException $e) {
+        error_log('End tournament error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -476,10 +506,6 @@ function handleAdminEndTournament() {
 // ==============================================
 function handleAdminDistributePrizes() {
     global $db, $conn;
-    
-    if (!isAdminLoggedIn()) {
-        jsonResponse(false, 'Admin access required', [], 403);
-    }
     
     $input = json_decode(file_get_contents('php://input'), true);
     $tournamentId = intval($input['id'] ?? 0);
@@ -503,13 +529,14 @@ function handleAdminDistributePrizes() {
             jsonResponse(false, 'Tournament not found', [], 404);
         }
         
-        $totalPool = $tournament['entry_fee'] * $tournament['total_players'];
-        $platformFee = $totalPool * (PLATFORM_FEE / 100);
+        $platformFeePercent = defined('PLATFORM_FEE') ? PLATFORM_FEE : 15;
+        $totalPool = floatval($tournament['entry_fee']) * intval($tournament['total_players']);
+        $platformFee = $totalPool * ($platformFeePercent / 100);
         $netPool = $totalPool - $platformFee;
         
-        $firstPrize = round($netPool * ($tournament['first_prize_percent'] / 100), 2);
-        $secondPrize = round($netPool * ($tournament['second_prize_percent'] / 100), 2);
-        $thirdPrize = round($netPool * ($tournament['third_prize_percent'] / 100), 2);
+        $firstPrize = round($netPool * (floatval($tournament['first_prize_percent'] ?? 60) / 100), 2);
+        $secondPrize = round($netPool * (floatval($tournament['second_prize_percent'] ?? 30) / 100), 2);
+        $thirdPrize = round($netPool * (floatval($tournament['third_prize_percent'] ?? 10) / 100), 2);
         
         $winners = [
             $firstWinnerId => ['prize' => $firstPrize, 'status' => 'winner'],
@@ -526,8 +553,13 @@ function handleAdminDistributePrizes() {
                 $stmt->execute([':status' => $data['status'], ':prize' => $data['prize'], ':tid' => $tournamentId, ':uid' => $winnerId]);
                 
                 $orderId = 'PRIZE-' . strtoupper(bin2hex(random_bytes(6)));
-                $stmt = $conn->prepare("INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at) VALUES (:uid, :tid, :amt, 'credit', 'match_win', :desc, :oid, 'success', (SELECT wallet_balance FROM users WHERE id = :uid) - :amt, (SELECT wallet_balance FROM users WHERE id = :uid), CURRENT_TIMESTAMP)");
-                $stmt->execute([':uid' => $winnerId, ':tid' => $tournamentId, ':amt' => $data['prize'], ':desc' => "Tournament prize: {$tournament['name']}", ':oid' => $orderId]);
+                $stmt = $conn->prepare("INSERT INTO transactions (user_id, tournament_id, amount, type, source, description, order_id, status, balance_before, balance_after, created_at) VALUES (:uid, :tid, :amt, 'credit', 'match_win', :desc, :oid, 'success', (SELECT wallet_balance FROM users WHERE id = :uid2) - :amt2, (SELECT wallet_balance FROM users WHERE id = :uid3), CURRENT_TIMESTAMP)");
+                $stmt->execute([
+                    ':uid' => $winnerId, ':tid' => $tournamentId, ':amt' => $data['prize'],
+                    ':desc' => "Tournament prize: " . ($tournament['name'] ?? 'Tournament'),
+                    ':oid' => $orderId,
+                    ':uid2' => $winnerId, ':amt2' => $data['prize'], ':uid3' => $winnerId
+                ]);
             }
         }
         
@@ -543,7 +575,7 @@ function handleAdminDistributePrizes() {
         ]);
     } catch (PDOException $e) {
         if ($db->inTransaction()) $db->rollback();
+        error_log('Distribute prizes error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
-?>
