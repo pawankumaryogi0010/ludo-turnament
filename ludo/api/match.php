@@ -3,7 +3,7 @@
  * ======================================================
  * MATCH.PHP - Match Management API (FIXED)
  * Ludo Tournament Platform - Complete Match System
- * Version: 4.0.0 - API PATHS FIXED + BUG FIXES
+ * Version: 4.1.0 - AUTH FIX + 401 FIX
  * ======================================================
  */
 
@@ -27,13 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// AUTHENTICATION
+// ==============================================
+// FIXED: AUTH CHECK WITH PROPER 401 RESPONSE
+// ==============================================
 if (!isLoggedIn()) {
     jsonResponse(false, 'Please login to join a match', [], 401);
 }
 
 $userId = getCurrentUserId();
-if (!$userId) {
+if (!$userId || $userId <= 0) {
     jsonResponse(false, 'Invalid session', [], 401);
 }
 
@@ -160,7 +162,7 @@ function handleJoinMatch() {
         $existingMatch = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($existingMatch) {
-            // FIXED: Join existing match with correct room code & turn
+            // Join existing match
             $matchId = $existingMatch['id'];
             $player1Id = intval($existingMatch['player1_id']);
             $firstTurn = rand(0, 1) === 0 ? $player1Id : $userId;
@@ -215,17 +217,18 @@ function handleJoinMatch() {
             // Create new match
             $stmt = $conn->prepare("
                 INSERT INTO matches (
-                    room_code, entry_fee, prize_pool, platform_fee,
+                    room_code, tournament_id, entry_fee, prize_pool, platform_fee,
                     player1_id, player1_name, status, current_turn_id,
                     turn_number, created_at, updated_at
                 ) VALUES (
-                    :rc, :fee, :prize, :pf,
+                    :rc, :tid, :fee, :prize, :pf,
                     :p1id, :p1name, 'waiting', :p1id,
                     0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             ");
             $stmt->execute([
-                ':rc' => $roomCode, ':fee' => $entryFee,
+                ':rc' => $roomCode, ':tid' => $tournamentId,
+                ':fee' => $entryFee,
                 ':prize' => $prizePool, ':pf' => $platformFee,
                 ':p1id' => $userId, ':p1name' => $user['username']
             ]);
@@ -267,9 +270,11 @@ function handleJoinMatch() {
         
     } catch (PDOException $e) {
         if (isset($db) && $db->inTransaction()) $db->rollback();
+        error_log('Match join error: ' . $e->getMessage());
         jsonResponse(false, 'Database error: ' . $e->getMessage(), [], 500);
     } catch (Exception $e) {
         if (isset($db) && $db->inTransaction()) $db->rollback();
+        error_log('Match join error: ' . $e->getMessage());
         jsonResponse(false, 'Error: ' . $e->getMessage(), [], 500);
     }
 }
@@ -307,12 +312,13 @@ function handleGetActiveMatch() {
         ]);
         
     } catch (PDOException $e) {
+        error_log('Match get_active error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
 
 // ==============================================
-// GET MATCH HISTORY
+// GET MATCH HISTORY (FIXED - PROPER AUTH)
 // ==============================================
 function handleGetMatchHistory() {
     global $userId;
@@ -334,8 +340,8 @@ function handleGetMatchHistory() {
         
         $stmt = $conn->prepare("
             SELECT id, room_code, entry_fee, prize_pool, status,
-                   player1_name, player2_name, winner_name, winning_amount,
-                   turn_number, created_at, completed_at
+                   player1_name, player2_name, winner_id, winner_name,
+                   winning_amount, turn_number, created_at, completed_at
             FROM matches 
             WHERE (player1_id = :uid OR player2_id = :uid)
             AND status IN ('completed', 'cancelled')
@@ -345,6 +351,15 @@ function handleGetMatchHistory() {
         $stmt->execute([':uid' => $userId, ':limit' => $limit, ':offset' => $offset]);
         $matches = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
+        // Convert numeric fields
+        foreach ($matches as &$m) {
+            $m['entry_fee'] = floatval($m['entry_fee'] ?? 0);
+            $m['prize_pool'] = floatval($m['prize_pool'] ?? 0);
+            $m['winning_amount'] = floatval($m['winning_amount'] ?? 0);
+            $m['winner_id'] = $m['winner_id'] ? intval($m['winner_id']) : null;
+        }
+        unset($m);
+        
         jsonResponse(true, 'Match history retrieved', [
             'matches' => $matches ?: [],
             'total' => $total,
@@ -353,6 +368,7 @@ function handleGetMatchHistory() {
         ]);
         
     } catch (PDOException $e) {
+        error_log('Match get_history error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -386,6 +402,9 @@ function handleGetRoomDetails() {
             jsonResponse(false, 'Room not found', [], 404);
         }
         
+        $match['entry_fee'] = floatval($match['entry_fee'] ?? 0);
+        $match['prize_pool'] = floatval($match['prize_pool'] ?? 0);
+        
         $isParticipant = ($match['player1_id'] == $userId || $match['player2_id'] == $userId);
         
         jsonResponse(true, 'Room details retrieved', [
@@ -394,6 +413,7 @@ function handleGetRoomDetails() {
         ]);
         
     } catch (PDOException $e) {
+        error_log('Match get_room error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
@@ -430,7 +450,7 @@ function handleSearchMatch() {
         ]);
         
     } catch (PDOException $e) {
+        error_log('Match search error: ' . $e->getMessage());
         jsonResponse(false, 'Database error', [], 500);
     }
 }
-?>
