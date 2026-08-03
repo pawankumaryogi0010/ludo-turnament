@@ -1,13 +1,11 @@
 <?php
 /**
  * ======================================================
- * AUTH.PHP - Secure Authentication API (COMPLETE FIXED)
+ * AUTH.PHP - Secure Authentication API (FIXED)
  * Ludo Tournament Platform - Complete Auth
- * Version: 4.0.0 - 500 ERROR FIXED + ALL AUTH FLOWS
+ * Version: 3.1.0 - 500 ERROR FIX + SESSION STRUCTURE FIX
  * ======================================================
  */
-
-declare(strict_types=1);
 
 if (!defined('BASE_PATH')) {
     define('BASE_PATH', dirname(__DIR__));
@@ -19,19 +17,20 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 
+// CORS
 $allowedOrigins = [
     'http://localhost',
     'http://localhost:3000',
     'http://127.0.0.1',
     'http://127.0.0.1/ludo',
     'http://localhost/ludo',
+    rtrim(BASE_URL, '/'),
 ];
-
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array(rtrim($origin, '/'), $allowedOrigins) || empty($origin)) {
-    header('Access-Control-Allow-Origin: ' . ($origin ?: 'http://localhost'));
+    header('Access-Control-Allow-Origin: ' . ($origin ?: rtrim(BASE_URL, '/')));
 } else {
-    header('Access-Control-Allow-Origin: http://localhost');
+    header('Access-Control-Allow-Origin: ' . rtrim(BASE_URL, '/'));
 }
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, X-CSRF-Token');
@@ -42,19 +41,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
-$rawInput = file_get_contents('php://input');
-$input = json_decode($rawInput, true);
-
-if (json_last_error() !== JSON_ERROR_NONE) {
-    $input = $_POST ?: [];
+// ==============================================
+// FIXED: CSRF VALIDATION
+// ==============================================
+function validateCsrfToken(string $token): bool
+{
+    if (empty($token)) {
+        return true;
+    }
+    
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        $_SESSION['csrf_token_time'] = time();
+        return true;
+    }
+    
+    if (isset($_SESSION['csrf_token_time'])) {
+        if ((time() - $_SESSION['csrf_token_time']) > 3600) {
+            unset($_SESSION['csrf_token'], $_SESSION['csrf_token_time']);
+            return false;
+        }
+    }
+    
+    return hash_equals($_SESSION['csrf_token'], $token);
 }
 
-$csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+// ==============================================
+// ROUTING
+// ==============================================
+$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
+
+// FIXED: Parse input safely
+$input = [];
+$rawInput = file_get_contents('php://input');
+if (!empty($rawInput)) {
+    $decoded = json_decode($rawInput, true);
+    if (is_array($decoded)) {
+        $input = $decoded;
+    }
+}
 
 try {
     switch ($action) {
@@ -77,8 +107,8 @@ try {
             jsonResponse(false, 'Invalid action', [], 400);
     }
 } catch (Exception $e) {
-    error_log('[Auth API] Fatal Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-    jsonResponse(false, 'Server error occurred. Please try again.', [], 500);
+    error_log('Auth API error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    jsonResponse(false, 'Server error: ' . $e->getMessage(), [], 500);
 }
 
 // ==============================================
@@ -101,36 +131,7 @@ function handleGetCsrf(): void
 }
 
 // ==============================================
-// CSRF VALIDATION
-// ==============================================
-function validateCsrfToken(string $token): bool
-{
-    if (empty($token)) {
-        return true;
-    }
-    
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
-    
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        $_SESSION['csrf_token_time'] = time();
-        return true;
-    }
-    
-    if (isset($_SESSION['csrf_token_time'])) {
-        if ((time() - $_SESSION['csrf_token_time']) > 3600) {
-            unset($_SESSION['csrf_token'], $_SESSION['csrf_token_time']);
-            return false;
-        }
-    }
-    
-    return hash_equals($_SESSION['csrf_token'], $token);
-}
-
-// ==============================================
-// LOGIN HANDLER (FIXED - NO 500 ERROR)
+// LOGIN HANDLER (FIXED)
 // ==============================================
 function handleLogin(array $input): void
 {
@@ -139,6 +140,7 @@ function handleLogin(array $input): void
         $password = $input['password'] ?? '';
         $csrfToken = $input['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 
+        // CSRF validation
         if (!empty($csrfToken) && !validateCsrfToken($csrfToken)) {
             jsonResponse(false, 'Invalid CSRF token. Please refresh the page.', [], 403);
         }
@@ -155,12 +157,11 @@ function handleLogin(array $input): void
         $conn = $db->getConnection();
 
         $stmt = $conn->prepare("
-            SELECT 
-                id, username, mobile, email, password_hash,
-                is_active, is_verified, kyc_status,
-                wallet_balance, total_matches_played, total_matches_won,
-                total_earnings, elo_rating, refer_code,
-                referral_earnings, failed_login_attempts
+            SELECT id, username, mobile, email, password_hash,
+                   is_active, is_verified, kyc_status,
+                   wallet_balance, total_matches_played, total_matches_won,
+                   total_earnings, elo_rating, refer_code,
+                   referral_earnings, failed_login_attempts
             FROM users
             WHERE username = :username OR mobile = :username OR email = :username
             LIMIT 1
@@ -176,61 +177,68 @@ function handleLogin(array $input): void
             jsonResponse(false, 'Account deactivated. Please contact support.', [], 403);
         }
 
-        if (intval($user['failed_login_attempts'] ?? 0) >= MAX_LOGIN_ATTEMPTS) {
-            jsonResponse(false, 'Account locked due to too many failed attempts. Contact support.', [], 403);
+        $maxAttempts = defined('MAX_LOGIN_ATTEMPTS') ? MAX_LOGIN_ATTEMPTS : 5;
+        if (intval($user['failed_login_attempts'] ?? 0) >= $maxAttempts) {
+            jsonResponse(false, 'Account locked. Contact support.', [], 403);
         }
 
         if (!password_verify($password, $user['password_hash'])) {
-            $updateStmt = $conn->prepare("UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0) + 1 WHERE id = :uid");
-            $updateStmt->execute([':uid' => $user['id']]);
-            
-            $remaining = MAX_LOGIN_ATTEMPTS - intval($user['failed_login_attempts'] ?? 0) - 1;
+            $stmt = $conn->prepare("UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0) + 1 WHERE id = :uid");
+            $stmt->execute([':uid' => $user['id']]);
+            $remaining = $maxAttempts - intval($user['failed_login_attempts'] ?? 0) - 1;
             $msg = 'Invalid credentials';
-            if ($remaining > 0) {
-                $msg .= ". {$remaining} attempt(s) remaining.";
-            } else {
-                $msg .= '. Account locked.';
-            }
-            
+            if ($remaining > 0) $msg .= ". {$remaining} attempt(s) remaining.";
             jsonResponse(false, $msg, [], 401);
         }
 
-        $updateStmt = $conn->prepare("UPDATE users SET failed_login_attempts = 0, last_login = CURRENT_TIMESTAMP WHERE id = :uid");
-        $updateStmt->execute([':uid' => $user['id']]);
+        // Reset failed attempts
+        $stmt = $conn->prepare("UPDATE users SET failed_login_attempts = 0, last_login = CURRENT_TIMESTAMP WHERE id = :uid");
+        $stmt->execute([':uid' => $user['id']]);
 
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        // Session regeneration on login
         session_regenerate_id(true);
         
-        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['logged_in'] = true;
+        SessionManager::set('user_id', (int)$user['id']);
+        SessionManager::set('username', $user['username']);
+        SessionManager::set('logged_in', true);
 
-        unset($user['password_hash'], $user['failed_login_attempts']);
-        
-        $user['wallet_balance'] = floatval($user['wallet_balance'] ?? 0);
-        $user['total_earnings'] = floatval($user['total_earnings'] ?? 0);
-        $user['referral_earnings'] = floatval($user['referral_earnings'] ?? 0);
-        $user['id'] = intval($user['id']);
-        $user['elo_rating'] = intval($user['elo_rating'] ?? 1200);
-        $user['total_matches_played'] = intval($user['total_matches_played'] ?? 0);
-        $user['total_matches_won'] = intval($user['total_matches_won'] ?? 0);
+        // Build clean user object (no password)
+        $userClean = [
+            'id' => (int)$user['id'],
+            'username' => $user['username'],
+            'mobile' => $user['mobile'],
+            'email' => $user['email'],
+            'wallet_balance' => (float)($user['wallet_balance'] ?? 0),
+            'total_matches_played' => (int)($user['total_matches_played'] ?? 0),
+            'total_matches_won' => (int)($user['total_matches_won'] ?? 0),
+            'total_earnings' => (float)($user['total_earnings'] ?? 0),
+            'elo_rating' => (int)($user['elo_rating'] ?? 1200),
+            'is_verified' => (bool)($user['is_verified'] ?? false),
+            'kyc_status' => $user['kyc_status'] ?? 'not_submitted',
+            'refer_code' => $user['refer_code'] ?? '',
+            'referral_earnings' => (float)($user['referral_earnings'] ?? 0),
+        ];
 
+        // Generate new CSRF token
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['csrf_token_time'] = time();
+        $newCsrf = $_SESSION['csrf_token'];
 
+        // FIXED: Return flat structure that auth-helper.js expects
         jsonResponse(true, 'Login successful', [
-            'user' => $user,
-            'csrf_token' => $_SESSION['csrf_token']
+            'user' => $userClean,
+            'csrf_token' => $newCsrf
         ]);
 
     } catch (PDOException $e) {
-        error_log('[Auth API] Login PDO Error: ' . $e->getMessage());
-        jsonResponse(false, 'Database error occurred. Please try again.', [], 500);
+        error_log('Auth Login PDO error: ' . $e->getMessage());
+        jsonResponse(false, 'Database error. Please try again.', [], 500);
     } catch (Exception $e) {
-        error_log('[Auth API] Login Error: ' . $e->getMessage());
-        jsonResponse(false, 'An error occurred during login. Please try again.', [], 500);
+        error_log('Auth Login error: ' . $e->getMessage());
+        jsonResponse(false, 'Server error. Please try again.', [], 500);
     }
 }
 
@@ -260,7 +268,7 @@ function handleRegister(array $input): void
         }
 
         if (!preg_match('/^[0-9]{10}$/', $mobile)) {
-            jsonResponse(false, 'Invalid mobile number (10 digits required)', [], 400);
+            jsonResponse(false, 'Invalid mobile number', [], 400);
         }
 
         if (strlen($password) < 6) {
@@ -268,29 +276,32 @@ function handleRegister(array $input): void
         }
 
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            jsonResponse(false, 'Invalid email format', [], 400);
+            jsonResponse(false, 'Invalid email', [], 400);
         }
 
         $db = Database::getInstance();
         $conn = $db->getConnection();
         $conn->beginTransaction();
 
-        $stmt = $conn->prepare("SELECT id FROM users WHERE mobile = :mobile LIMIT 1");
+        // Check mobile
+        $stmt = $conn->prepare("SELECT id FROM users WHERE mobile = :mobile");
         $stmt->execute([':mobile' => $mobile]);
         if ($stmt->fetch()) {
             $conn->rollBack();
-            jsonResponse(false, 'Mobile number already registered', [], 409);
+            jsonResponse(false, 'Mobile already registered', [], 409);
         }
 
-        $stmt = $conn->prepare("SELECT id FROM users WHERE username = :username LIMIT 1");
+        // Check username
+        $stmt = $conn->prepare("SELECT id FROM users WHERE username = :username");
         $stmt->execute([':username' => $username]);
         if ($stmt->fetch()) {
             $conn->rollBack();
-            jsonResponse(false, 'Username already taken', [], 409);
+            jsonResponse(false, 'Username taken', [], 409);
         }
 
+        // Check email
         if (!empty($email)) {
-            $stmt = $conn->prepare("SELECT id FROM users WHERE email = :email LIMIT 1");
+            $stmt = $conn->prepare("SELECT id FROM users WHERE email = :email");
             $stmt->execute([':email' => $email]);
             if ($stmt->fetch()) {
                 $conn->rollBack();
@@ -303,103 +314,82 @@ function handleRegister(array $input): void
 
         $referredBy = null;
         if (!empty($referralCode)) {
-            $stmt = $conn->prepare("SELECT id FROM users WHERE refer_code = :code LIMIT 1");
+            $stmt = $conn->prepare("SELECT id FROM users WHERE refer_code = :code");
             $stmt->execute([':code' => $referralCode]);
             $referrer = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($referrer) {
-                $referredBy = $referrer['id'];
-            }
+            if ($referrer) $referredBy = (int)$referrer['id'];
         }
 
         $stmt = $conn->prepare("
-            INSERT INTO users (
-                username, mobile, email, password_hash,
-                refer_code, referred_by, wallet_balance,
-                is_verified, is_active, kyc_status,
-                created_at, updated_at
-            ) VALUES (
-                :username, :mobile, :email, :password_hash,
-                :refer_code, :referred_by, 0,
-                0, 1, 'not_submitted',
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
+            INSERT INTO users (username, mobile, email, password_hash, refer_code, referred_by, wallet_balance, is_verified, is_active, kyc_status, created_at, updated_at)
+            VALUES (:username, :mobile, :email, :password_hash, :refer_code, :referred_by, 0, 0, 1, 'not_submitted', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
-            ':username' => $username,
-            ':mobile' => $mobile,
-            ':email' => $email,
-            ':password_hash' => $passwordHash,
-            ':refer_code' => $referCode,
-            ':referred_by' => $referredBy
+            ':username' => $username, ':mobile' => $mobile, ':email' => $email,
+            ':password_hash' => $passwordHash, ':refer_code' => $referCode, ':referred_by' => $referredBy
         ]);
-        $userId = intval($conn->lastInsertId());
+        $newUserId = (int)$conn->lastInsertId();
 
+        // Referral bonus
         if ($referredBy) {
-            $stmt = $conn->prepare("
-                UPDATE users SET 
-                    wallet_balance = wallet_balance + 50,
-                    referral_earnings = COALESCE(referral_earnings, 0) + 50,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :rid
-            ");
+            $stmt = $conn->prepare("UPDATE users SET wallet_balance = wallet_balance + 50, referral_earnings = COALESCE(referral_earnings, 0) + 50, updated_at = CURRENT_TIMESTAMP WHERE id = :rid");
             $stmt->execute([':rid' => $referredBy]);
-            
-            $stmt = $conn->prepare("
-                INSERT INTO referral_bonuses (referrer_id, referred_id, bonus_amount, status, credited_at)
-                VALUES (:rid, :uid, 50, 'credited', CURRENT_TIMESTAMP)
-            ");
-            $stmt->execute([':rid' => $referredBy, ':uid' => $userId]);
+            $stmt = $conn->prepare("INSERT INTO referral_bonuses (referrer_id, referred_id, bonus_amount, status, credited_at) VALUES (:rid, :uid, 50, 'credited', CURRENT_TIMESTAMP)");
+            $stmt->execute([':rid' => $referredBy, ':uid' => $newUserId]);
         }
 
         $conn->commit();
 
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        // Session regeneration on registration
         session_regenerate_id(true);
         
-        $_SESSION['user_id'] = $userId;
+        $_SESSION['user_id'] = $newUserId;
         $_SESSION['username'] = $username;
         $_SESSION['logged_in'] = true;
+        SessionManager::set('user_id', $newUserId);
+        SessionManager::set('username', $username);
+        SessionManager::set('logged_in', true);
+
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['csrf_token_time'] = time();
+        $newCsrf = $_SESSION['csrf_token'];
 
-        $stmt = $conn->prepare("
-            SELECT id, username, mobile, email, wallet_balance,
-                   total_matches_played, total_matches_won, total_earnings,
-                   elo_rating, is_verified, kyc_status, refer_code, referral_earnings
-            FROM users WHERE id = :uid
-        ");
-        $stmt->execute([':uid' => $userId]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($user) {
-            $user['wallet_balance'] = floatval($user['wallet_balance'] ?? 0);
-            $user['id'] = intval($user['id']);
-        }
+        // Build user object
+        $userClean = [
+            'id' => $newUserId,
+            'username' => $username,
+            'mobile' => $mobile,
+            'email' => $email,
+            'wallet_balance' => 0.00,
+            'total_matches_played' => 0,
+            'total_matches_won' => 0,
+            'total_earnings' => 0.00,
+            'elo_rating' => 1200,
+            'is_verified' => false,
+            'kyc_status' => 'not_submitted',
+            'refer_code' => $referCode,
+            'referral_earnings' => 0.00,
+        ];
 
+        // FIXED: Return flat structure
         jsonResponse(true, 'Registration successful', [
-            'user' => $user,
-            'csrf_token' => $_SESSION['csrf_token']
+            'user' => $userClean,
+            'csrf_token' => $newCsrf
         ]);
 
     } catch (PDOException $e) {
-        if (isset($conn) && $conn->inTransaction()) {
-            $conn->rollBack();
-        }
-        error_log('[Auth API] Register PDO Error: ' . $e->getMessage());
+        if (isset($conn) && $conn->inTransaction()) $conn->rollBack();
+        error_log('Auth Register PDO error: ' . $e->getMessage());
         jsonResponse(false, 'Registration failed. Please try again.', [], 500);
     } catch (Exception $e) {
-        if (isset($conn) && $conn->inTransaction()) {
-            $conn->rollBack();
-        }
-        error_log('[Auth API] Register Error: ' . $e->getMessage());
-        jsonResponse(false, 'An error occurred during registration.', [], 500);
+        if (isset($conn) && $conn->inTransaction()) $conn->rollBack();
+        error_log('Auth Register error: ' . $e->getMessage());
+        jsonResponse(false, 'Registration failed. Please try again.', [], 500);
     }
 }
 
 // ==============================================
-// LOGOUT HANDLER
+// LOGOUT HANDLER (FIXED)
 // ==============================================
 function handleLogout(array $input): void
 {
@@ -412,28 +402,20 @@ function handleLogout(array $input): void
         
         if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();
-            setcookie(
-                session_name(),
-                '',
-                time() - 42000,
-                $params['path'],
-                $params['domain'],
-                $params['secure'],
-                $params['httponly']
-            );
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
         }
         
         session_destroy();
         jsonResponse(true, 'Logged out successfully');
 
     } catch (Exception $e) {
-        error_log('[Auth API] Logout Error: ' . $e->getMessage());
+        error_log('Auth Logout error: ' . $e->getMessage());
         jsonResponse(false, 'Error during logout', [], 500);
     }
 }
 
 // ==============================================
-// CHECK AUTH HANDLER (FIXED - Always returns 200)
+// CHECK AUTH HANDLER (FIXED)
 // ==============================================
 function handleCheckAuth(): void
 {
@@ -453,17 +435,11 @@ function handleCheckAuth(): void
         $db = Database::getInstance();
         $conn = $db->getConnection();
 
-        $stmt = $conn->prepare("
-            SELECT id, username, mobile, email, wallet_balance,
-                   total_matches_played, total_matches_won, total_earnings,
-                   elo_rating, is_verified, kyc_status, is_active,
-                   refer_code, referral_earnings
-            FROM users WHERE id = :uid AND is_active = 1
-        ");
-        $stmt->execute([':uid' => intval($userId)]);
+        $stmt = $conn->prepare("SELECT id, username, mobile, email, wallet_balance, total_matches_played, total_matches_won, total_earnings, elo_rating, is_verified, kyc_status, is_active, refer_code, referral_earnings FROM users WHERE id = :uid");
+        $stmt->execute([':uid' => (int)$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$user) {
+        if (!$user || $user['is_active'] != 1) {
             $_SESSION = [];
             session_destroy();
             jsonResponse(true, 'User not found or inactive', ['logged_in' => false]);
@@ -475,18 +451,34 @@ function handleCheckAuth(): void
             $_SESSION['csrf_token_time'] = time();
         }
 
-        $user['wallet_balance'] = floatval($user['wallet_balance'] ?? 0);
-        $user['id'] = intval($user['id']);
+        $userClean = [
+            'id' => (int)$user['id'],
+            'username' => $user['username'],
+            'mobile' => $user['mobile'],
+            'email' => $user['email'],
+            'wallet_balance' => (float)($user['wallet_balance'] ?? 0),
+            'total_matches_played' => (int)($user['total_matches_played'] ?? 0),
+            'total_matches_won' => (int)($user['total_matches_won'] ?? 0),
+            'total_earnings' => (float)($user['total_earnings'] ?? 0),
+            'elo_rating' => (int)($user['elo_rating'] ?? 1200),
+            'is_verified' => (bool)($user['is_verified'] ?? false),
+            'kyc_status' => $user['kyc_status'] ?? 'not_submitted',
+            'refer_code' => $user['refer_code'] ?? '',
+            'referral_earnings' => (float)($user['referral_earnings'] ?? 0),
+        ];
 
+        // FIXED: Return flat structure
         jsonResponse(true, 'Authenticated', [
             'logged_in' => true,
-            'user' => $user,
+            'user' => $userClean,
             'csrf_token' => $_SESSION['csrf_token']
         ]);
 
+    } catch (PDOException $e) {
+        error_log('Auth Check PDO error: ' . $e->getMessage());
+        jsonResponse(false, 'Error checking authentication', [], 500);
     } catch (Exception $e) {
-        error_log('[Auth API] Check Auth Error: ' . $e->getMessage());
+        error_log('Auth Check error: ' . $e->getMessage());
         jsonResponse(false, 'Error checking authentication', [], 500);
     }
 }
-?>
